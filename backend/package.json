@@ -1,0 +1,21 @@
+{
+  "name": "ft_backend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "fastify": "^5.0.0",
+    "@fastify/jwt": "^8.0.0",
+    "@fastify/static": "^7.0.0",
+    "fastify-sqlite": "^1.0.0",
+    "speakeasy": "^2.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^20.5.0"
+  }
+}
