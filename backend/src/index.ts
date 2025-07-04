@@ -10,4 +10,5 @@ app.register(fastifySqlite, {
 });
 
 app.get("/api/ping", async () => ({ pong: true }));
+import "./migrate.js"; 
 app.listen({ host: "0.0.0.0", port: 3000 });
