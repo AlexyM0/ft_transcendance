@@ -1,48 +1,86 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ft_transcendance</title>
-    <!-- Tailwind via CDN (vite build remplacera en prod) -->
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
   <body class="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
     <main class="flex flex-col items-center space-y-10">
-      <!-- Login button -->
-      <button
-        id="btn-login"
-        class="relative px-12 py-5 rounded-2xl bg-blue-600 text-white text-xl font-semibold shadow-xl transition-all duration-300 
-               hover:-translate-y-1 hover:shadow-2xl hover:bg-blue-700 active:translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-blue-300"
-      >
-        Login
-      </button>
+      <!-- Boutons principaux -->
+      <div id="main-buttons" class="flex flex-col items-center space-y-10">
+        <button
+          id="btn-login"
+          class="relative px-12 py-5 rounded-2xl bg-blue-600 text-white text-xl font-semibold shadow-xl transition-all duration-300 
+                 hover:-translate-y-1 hover:shadow-2xl hover:bg-blue-700 active:translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-blue-300"
+        >
+          Login
+        </button>
 
-      <!-- Settings button -->
-      <button
-        id="btn-settings"
-        class="relative px-12 py-5 rounded-2xl bg-gray-200 text-gray-900 text-xl font-semibold shadow-xl transition-all duration-300
-               hover:-translate-y-1 hover:shadow-2xl hover:bg-gray-300 active:translate-y-0.5 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600
-               focus:outline-none focus:ring-4 focus:ring-gray-400/60 dark:focus:ring-gray-500/60"
-      >
-        Settings
-      </button>
+        <button
+          id="btn-settings"
+          class="relative px-12 py-5 rounded-2xl bg-gray-200 text-gray-900 text-xl font-semibold shadow-xl transition-all duration-300
+                 hover:-translate-y-1 hover:shadow-2xl hover:bg-gray-300 active:translate-y-0.5 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600
+                 focus:outline-none focus:ring-4 focus:ring-gray-400/60 dark:focus:ring-gray-500/60"
+        >
+          Settings
+        </button>
+      </div>
+
+      <!-- Interface de sélection de langue -->
+      <div id="language-settings" class="hidden flex flex-col items-center space-y-6 bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl">
+        <div class="flex flex-col items-start space-y-4">
+          <label class="flex items-center space-x-2 text-lg text-gray-900 dark:text-gray-100">
+            <input type="radio" name="language" value="fr" checked class="accent-blue-600" />
+            <span>Français</span>
+          </label>
+          <label class="flex items-center space-x-2 text-lg text-gray-900 dark:text-gray-100">
+            <input type="radio" name="language" value="en" class="accent-blue-600" />
+            <span>Anglais</span>
+          </label>
+          <label class="flex items-center space-x-2 text-lg text-gray-900 dark:text-gray-100">
+            <input type="radio" name="language" value="zh" class="accent-blue-600" />
+            <span>Chinois</span>
+          </label>
+        </div>
+
+        <!-- Bouton Retour -->
+        <button
+          id="btn-back"
+          class="mt-6 px-8 py-3 rounded-xl bg-gray-300 text-gray-900 font-medium text-lg hover:bg-gray-400 dark:bg-gray-600 dark:text-white dark:hover:bg-gray-500 transition"
+        >
+          Retour
+        </button>
+      </div>
     </main>
 
-    <!-- TypeScript (simple module) -->
     <script type="module">
-      console.log("Landing loaded (TS)");
+      console.log("Landing loaded");
 
-     // const loginBtn = document.getElementById("btn-login")!;
-     // const settingsBtn = document.getElementById("btn-settings")!;
+      const loginBtn = document.getElementById("btn-login");
+      const settingsBtn = document.getElementById("btn-settings");
+      const languageSettings = document.getElementById("language-settings");
+      const mainButtons = document.getElementById("main-buttons");
+      const backBtn = document.getElementById("btn-back");
 
-      loginBtn.addEventListener("click", () => {
-        alert("Login clicked");
-      });
+      if (loginBtn && settingsBtn && languageSettings && mainButtons && backBtn) {
+        loginBtn.addEventListener("click", () => {
+          alert("Login clicked");
+        });
 
-      settingsBtn.addEventListener("click", () => {
-        alert("Settings clicked");
-      });
+        settingsBtn.addEventListener("click", () => {
+          mainButtons.classList.add("hidden");
+          languageSettings.classList.remove("hidden");
+        });
+
+        backBtn.addEventListener("click", () => {
+          languageSettings.classList.add("hidden");
+          mainButtons.classList.remove("hidden");
+        });
+      } else {
+        console.error("Un ou plusieurs éléments sont introuvables");
+      }
     </script>
   </body>
 </html>
