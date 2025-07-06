@@ -4,7 +4,7 @@ services:
   db:
     build: ./db
     volumes:
-      - sqlite_data:/data           # le fichier main.db sera ici
+      - sqlite_data:/app/data           # le fichier main.db sera ici
     networks: [internal]
 
   backend:
@@ -13,7 +13,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:-devsecret}
       - DB_PATH=/data/main.db
     volumes:
-      - sqlite_data:/data           # partage la base avec le service `db`
+      - sqlite_data:/app/data           # partage la base avec le service `db`
     ports:
       - "3000:3000"                 # API disponible sur localhost:3000
     depends_on: [db]

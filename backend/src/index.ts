@@ -33,14 +33,20 @@ async function main() {
   app.decorate("db", db);
 
   // Appliquer la migration SQL
-  const migrationPath = path.join(__dirname, "../migrations/001_create_users.sql");
-  if (fs.existsSync(migrationPath)) {
-    const sql = fs.readFileSync(migrationPath, "utf8");
-    db.exec(sql);
-    console.log("✅ Migration SQL appliquée");
-  } else {
-    console.error("❌ Fichier SQL manquant :", migrationPath);
-  }
+    const migrationPath = path.join(__dirname, "../migrations/001_create_users.sql");
+    console.log("Chemin migration :", migrationPath, "existe ?", fs.existsSync(migrationPath));
+
+    if (fs.existsSync(migrationPath)) {
+      try {
+        const sql = fs.readFileSync(migrationPath, "utf8");
+        db.exec(sql);
+        console.log("✅ Migration SQL appliquée");
+      } catch (e) {
+        console.error("❌ Erreur pendant l'exécution de la migration :", e);
+      }
+    } else {
+      console.error("❌ Fichier SQL introuvable :", migrationPath);
+    }
 
   // Route d'inscription
   app.post("/api/register", async (req, rep) => {
