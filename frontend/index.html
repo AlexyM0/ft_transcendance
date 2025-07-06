@@ -151,22 +151,22 @@
       }
 
       loginBtn.addEventListener("click", () => {
-        history.pushState({ page: "login" }, "", "#login");
+        history.pushState({ page: "login" }, "", "login");
         showView("login");
       });
 
       settingsBtn.addEventListener("click", () => {
-        history.pushState({ page: "settings" }, "", "#settings");
+        history.pushState({ page: "settings" }, "", "settings");
         showView("settings");
       });
 
       backBtn.addEventListener("click", () => {
-        history.pushState({ page: "home" }, "", "#home");
+        history.pushState({ page: "home" }, "", "home");
         showView("home");
       });
 
       toSignUpBtn.addEventListener("click", () => {
-        history.pushState({ page: "signup" }, "", "#signup");
+        history.pushState({ page: "signup" }, "", "signup");
         showView("signup");
       });
 
@@ -179,11 +179,11 @@
       // Vue initiale selon l'URL
       window.addEventListener("load", () => {
         const hash = location.hash;
-        if (hash === "#login") {
+        if (hash === "login") {
           showView("login");
-        } else if (hash === "#signup") {
+        } else if (hash === "signup") {
           showView("signup");
-        } else if (hash === "#settings") {
+        } else if (hash === "settings") {
           showView("settings");
         } else {
           showView("home");
@@ -194,6 +194,41 @@
           history.replaceState({ page: hash.replace("#", "") || "home" }, "", location.href);
         }
       });
+      // Bouton "Valider l'inscription"
+      const signupBtn = signupForm.querySelector('button.bg-blue-600');
+      signupBtn.addEventListener('click', async () => {
+        const inputs = signupForm.querySelectorAll('input');
+        const pseudo = inputs[0].value.trim();
+        const email = inputs[1].value.trim();
+        const password = inputs[2].value.trim();
+
+        if (!pseudo || !email || !password) {
+          alert("Tous les champs sont requis");
+          return;
+        }
+
+        try {
+          const res = await fetch('http://localhost:3000/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pseudo, email, password })
+          });
+
+          const data = await res.json();
+
+          if (res.ok) {
+            alert("Inscription réussie !");
+            history.pushState({ page: "login" }, "", "#login");
+            showView("login");
+          } else {
+            alert(data.message || "Erreur lors de l'inscription");
+          }
+        } catch (err) {
+          alert("Erreur réseau");
+          console.error(err);
+        }
+      });
+
     </script>
   </body>
 </html>
