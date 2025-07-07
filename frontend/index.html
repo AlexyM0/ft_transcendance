@@ -6,88 +6,49 @@
     <title>ft_transcendance</title>
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
+
   <body class="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
     <main class="flex flex-col items-center space-y-10">
       <!-- Vue principale -->
       <div id="main-buttons" class="flex flex-col items-center space-y-10">
-        <button
-          id="btn-login"
-          class="relative px-12 py-5 rounded-2xl bg-blue-600 text-white text-xl font-semibold shadow-xl transition-all duration-300 
-                 hover:-translate-y-1 hover:shadow-2xl hover:bg-blue-700 active:translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-blue-300"
-        >
+        <button id="btn-login"  class="relative px-12 py-5 rounded-2xl bg-blue-600 text-white text-xl font-semibold shadow-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:bg-blue-700 active:translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-blue-300">
           Login
         </button>
 
-        <button
-          id="btn-settings"
-          class="relative px-12 py-5 rounded-2xl bg-gray-200 text-gray-900 text-xl font-semibold shadow-xl transition-all duration-300
-                 hover:-translate-y-1 hover:shadow-2xl hover:bg-gray-300 active:translate-y-0.5 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600
-                 focus:outline-none focus:ring-4 focus:ring-gray-400/60 dark:focus:ring-gray-500/60"
-        >
+        <button id="btn-settings" class="relative px-12 py-5 rounded-2xl bg-gray-200 text-gray-900 text-xl font-semibold shadow-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:bg-gray-300 active:translate-y-0.5 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600 focus:outline-none focus:ring-4 focus:ring-gray-400/60 dark:focus:ring-gray-500/60">
           Settings
         </button>
       </div>
 
       <!-- Vue Login -->
       <div id="login-options" class="hidden flex flex-col items-center space-y-6 bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl w-full max-w-sm">
-        <input
-          type="email"
-          placeholder="Adresse mail"
-          class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white"
-        />
-        <input
-          type="password"
-          placeholder="Mot de passe"
-          class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white"
-        />
+        <input type="email"     placeholder="Adresse mail" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
+        <input type="password"  placeholder="Mot de passe" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
 
-        <button
-          class="w-full px-6 py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition"
-        >
+        <button class="w-full px-6 py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition">
           Sign in with Google
         </button>
 
-        <button
-          class="w-full px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition"
-        >
+        <button id="btn-signin" class="w-full px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
           Se connecter
         </button>
 
-        <button
-          id="btn-to-signup"
-          class="w-full text-sm text-blue-600 hover:underline dark:text-blue-400"
-        >
+        <button id="btn-to-signup" class="w-full text-sm text-blue-600 hover:underline dark:text-blue-400">
           Créer un compte
         </button>
       </div>
 
       <!-- Vue Sign Up -->
       <div id="signup-form" class="hidden flex flex-col items-center space-y-6 bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl w-full max-w-sm">
-        <input
-          type="text"
-          placeholder="Pseudo"
-          class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white"
-        />
-        <input
-          type="email"
-          placeholder="Adresse mail"
-          class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white"
-        />
-        <input
-          type="password"
-          placeholder="Mot de passe"
-          class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white"
-        />
+        <input type="text"     placeholder="Pseudo"          class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
+        <input type="email"    placeholder="Adresse mail"    class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
+        <input type="password" placeholder="Mot de passe"    class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
 
-        <button
-          class="w-full px-6 py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition"
-        >
+        <button class="w-full px-6 py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition">
           Sign up with Google
         </button>
 
-        <button
-          class="w-full px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition"
-        >
+        <button id="btn-valid-signup" class="w-full px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
           Valider l'inscription
         </button>
       </div>
@@ -95,140 +56,113 @@
       <!-- Vue Settings -->
       <div id="language-settings" class="hidden flex flex-col items-center space-y-6 bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl">
         <div class="flex flex-col items-start space-y-4">
-          <label class="flex items-center space-x-2 text-lg text-gray-900 dark:text-gray-100">
-            <input type="radio" name="language" value="fr" checked class="accent-blue-600" />
-            <span>Français</span>
-          </label>
-          <label class="flex items-center space-x-2 text-lg text-gray-900 dark:text-gray-100">
-            <input type="radio" name="language" value="en" class="accent-blue-600" />
-            <span>Anglais</span>
-          </label>
-          <label class="flex items-center space-x-2 text-lg text-gray-900 dark:text-gray-100">
-            <input type="radio" name="language" value="zh" class="accent-blue-600" />
-            <span>Chinois</span>
-          </label>
+          <label class="flex items-center space-x-2 text-lg text-gray-900 dark:text-gray-100"><input type="radio" name="language" value="fr" checked class="accent-blue-600" /><span>Français</span></label>
+          <label class="flex items-center space-x-2 text-lg text-gray-900 dark:text-gray-100"><input type="radio" name="language" value="en" class="accent-blue-600" /><span>Anglais</span></label>
+          <label class="flex items-center space-x-2 text-lg text-gray-900 dark:text-gray-100"><input type="radio" name="language" value="zh" class="accent-blue-600" /><span>Chinois</span></label>
         </div>
 
-        <button
-          id="btn-back"
-          class="mt-6 px-8 py-3 rounded-xl bg-gray-300 text-gray-900 font-medium text-lg hover:bg-gray-400 dark:bg-gray-600 dark:text-white dark:hover:bg-gray-500 transition"
-        >
+        <button id="btn-back" class="mt-6 px-8 py-3 rounded-xl bg-gray-300 text-gray-900 font-medium text-lg hover:bg-gray-400 dark:bg-gray-600 dark:text-white dark:hover:bg-gray-500 transition">
           Retour
         </button>
       </div>
     </main>
 
     <script type="module">
-      const loginBtn = document.getElementById("btn-login");
-      const settingsBtn = document.getElementById("btn-settings");
-      const backBtn = document.getElementById("btn-back");
-      const toSignUpBtn = document.getElementById("btn-to-signup");
+      /* ----------- navigation vues SPA ----------- */
+      const loginBtn       = document.getElementById("btn-login");
+      const settingsBtn    = document.getElementById("btn-settings");
+      const backBtn        = document.getElementById("btn-back");
+      const toSignUpBtn    = document.getElementById("btn-to-signup");
 
-      const mainButtons = document.getElementById("main-buttons");
-      const loginOptions = document.getElementById("login-options");
-      const signupForm = document.getElementById("signup-form");
+      const mainButtons    = document.getElementById("main-buttons");
+      const loginOptions   = document.getElementById("login-options");
+      const signupForm     = document.getElementById("signup-form");
       const languageSettings = document.getElementById("language-settings");
 
       function showView(view) {
-        mainButtons.classList.add("hidden");
-        loginOptions.classList.add("hidden");
-        signupForm.classList.add("hidden");
-        languageSettings.classList.add("hidden");
+        [mainButtons, loginOptions, signupForm, languageSettings]
+          .forEach(el => el.classList.add("hidden"));
 
-        switch (view) {
-          case "login":
-            loginOptions.classList.remove("hidden");
-            break;
-          case "signup":
-            signupForm.classList.remove("hidden");
-            break;
-          case "settings":
-            languageSettings.classList.remove("hidden");
-            break;
-          default:
-            mainButtons.classList.remove("hidden");
-        }
+        if (view === "login")      loginOptions.classList.remove("hidden");
+        else if (view === "signup") signupForm.classList.remove("hidden");
+        else if (view === "settings") languageSettings.classList.remove("hidden");
+        else mainButtons.classList.remove("hidden");
       }
 
-      loginBtn.addEventListener("click", () => {
-        history.pushState({ page: "login" }, "", "login");
-        showView("login");
-      });
+      loginBtn     .addEventListener("click", () => { history.pushState({ page:"login" }, "", "login");     showView("login"); });
+      settingsBtn  .addEventListener("click", () => { history.pushState({ page:"settings" }, "", "settings"); showView("settings"); });
+      backBtn      .addEventListener("click", () => { history.pushState({ page:"home" }, "", "home");       showView("home"); });
+      toSignUpBtn  .addEventListener("click", () => { history.pushState({ page:"signup" }, "", "signup");   showView("signup"); });
 
-      settingsBtn.addEventListener("click", () => {
-        history.pushState({ page: "settings" }, "", "settings");
-        showView("settings");
-      });
+      window.addEventListener("popstate", e => showView(e.state?.page || "home"));
 
-      backBtn.addEventListener("click", () => {
-        history.pushState({ page: "home" }, "", "home");
-        showView("home");
-      });
-
-      toSignUpBtn.addEventListener("click", () => {
-        history.pushState({ page: "signup" }, "", "signup");
-        showView("signup");
-      });
-
-      // Historique ← →
-      window.addEventListener("popstate", (event) => {
-        const page = event.state?.page || "home";
-        showView(page);
-      });
-
-      // Vue initiale selon l'URL
       window.addEventListener("load", () => {
-        const hash = location.hash;
-        if (hash === "login") {
-          showView("login");
-        } else if (hash === "signup") {
-          showView("signup");
-        } else if (hash === "settings") {
-          showView("settings");
-        } else {
-          showView("home");
-        }
-
-        // Init state
-        if (!history.state) {
-          history.replaceState({ page: hash.replace("#", "") || "home" }, "", location.href);
-        }
+        const hash = location.hash.replace("#", "");
+        showView(hash || "home");
+        if (!history.state) history.replaceState({ page: hash || "home" }, "", location.href);
       });
-      // Bouton "Valider l'inscription"
-      const signupBtn = signupForm.querySelector('button.bg-blue-600');
-      signupBtn.addEventListener('click', async () => {
-        const inputs = signupForm.querySelectorAll('input');
-        const pseudo = inputs[0].value.trim();
-        const email = inputs[1].value.trim();
-        const password = inputs[2].value.trim();
 
-        if (!pseudo || !email || !password) {
-          alert("Tous les champs sont requis");
-          return;
-        }
+      /* ----------- Inscription ----------- */
+      const signupBtn = document.getElementById("btn-valid-signup");
+      signupBtn.addEventListener("click", async () => {
+        const inputs = signupForm.querySelectorAll("input");
+        const pseudo    = inputs[0].value.trim();
+        const email     = inputs[1].value.trim();
+        const password  = inputs[2].value.trim();
+
+        if (!pseudo || !email || !password) { alert("Tous les champs sont requis"); return; }
 
         try {
-          const res = await fetch('http://localhost:3000/api/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pseudo, email, password })
+          const res  = await fetch("http://localhost:3000/api/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password })   // le backend ignore pseudo pour l'instant
           });
-
           const data = await res.json();
 
           if (res.ok) {
             alert("Inscription réussie !");
-            history.pushState({ page: "login" }, "", "#login");
+            history.pushState({ page:"login" }, "", "#login");
             showView("login");
           } else {
-            alert(data.message || "Erreur lors de l'inscription");
+            alert(data.error || "Erreur lors de l'inscription");
           }
         } catch (err) {
-          alert("Erreur réseau");
           console.error(err);
+          alert("Erreur réseau");
         }
       });
 
+      /* ----------- Connexion ----------- */
+      const signinBtn = document.getElementById("btn-signin");
+      signinBtn.addEventListener("click", async () => {
+        const inputs = loginOptions.querySelectorAll("input");
+        const email     = inputs[0].value.trim();
+        const password  = inputs[1].value.trim();
+
+        if (!email || !password) { alert("Email et mot de passe requis"); return; }
+
+        try {
+          const res  = await fetch("http://localhost:3000/api/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password })
+          });
+          const data = await res.json();
+
+          if (res.ok) {
+            localStorage.setItem("authToken", data.token);
+            alert("Connexion réussie !");
+            showView("home");
+            // ici tu peux appeler /api/me pour afficher le profil
+          } else {
+            alert(data.error || "Erreur de connexion");
+          }
+        } catch (err) {
+          console.error(err);
+          alert("Erreur réseau");
+        }
+      });
     </script>
   </body>
 </html>
