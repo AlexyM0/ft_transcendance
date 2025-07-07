@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,9 +9,9 @@
 
   <body class="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
     <main class="flex flex-col items-center space-y-10">
-      <!-- Vue principale -->
+      <!-- Home view -->
       <div id="main-buttons" class="flex flex-col items-center space-y-10">
-        <button id="btn-login"  class="relative px-12 py-5 rounded-2xl bg-blue-600 text-white text-xl font-semibold shadow-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:bg-blue-700 active:translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-blue-300">
+        <button id="btn-login" class="relative px-12 py-5 rounded-2xl bg-blue-600 text-white text-xl font-semibold shadow-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:bg-blue-700 active:translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-blue-300">
           Login
         </button>
 
@@ -20,63 +20,63 @@
         </button>
       </div>
 
-      <!-- Vue Login -->
+      <!-- Login view -->
       <div id="login-options" class="hidden flex flex-col items-center space-y-6 bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl w-full max-w-sm">
-        <input type="email"     placeholder="Adresse mail" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
-        <input type="password"  placeholder="Mot de passe" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
+        <input type="email"    placeholder="Email address" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
+        <input type="password" placeholder="Password"      class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
 
         <button class="w-full px-6 py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition">
           Sign in with Google
         </button>
 
         <button id="btn-signin" class="w-full px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
-          Se connecter
+          Sign in
         </button>
 
         <button id="btn-to-signup" class="w-full text-sm text-blue-600 hover:underline dark:text-blue-400">
-          Créer un compte
+          Create an account
         </button>
       </div>
 
-      <!-- Vue Sign Up -->
+      <!-- Sign-up view -->
       <div id="signup-form" class="hidden flex flex-col items-center space-y-6 bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl w-full max-w-sm">
-        <input type="text"     placeholder="Pseudo"          class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
-        <input type="email"    placeholder="Adresse mail"    class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
-        <input type="password" placeholder="Mot de passe"    class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
+        <input type="text"     placeholder="Username"       class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
+        <input type="email"    placeholder="Email address"  class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
+        <input type="password" placeholder="Password"       class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
 
         <button class="w-full px-6 py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition">
           Sign up with Google
         </button>
 
         <button id="btn-valid-signup" class="w-full px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
-          Valider l'inscription
+          Create account
         </button>
       </div>
 
-      <!-- Vue Settings -->
+      <!-- Settings view -->
       <div id="language-settings" class="hidden flex flex-col items-center space-y-6 bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl">
         <div class="flex flex-col items-start space-y-4">
-          <label class="flex items-center space-x-2 text-lg text-gray-900 dark:text-gray-100"><input type="radio" name="language" value="fr" checked class="accent-blue-600" /><span>Français</span></label>
-          <label class="flex items-center space-x-2 text-lg text-gray-900 dark:text-gray-100"><input type="radio" name="language" value="en" class="accent-blue-600" /><span>Anglais</span></label>
-          <label class="flex items-center space-x-2 text-lg text-gray-900 dark:text-gray-100"><input type="radio" name="language" value="zh" class="accent-blue-600" /><span>Chinois</span></label>
+          <label class="flex items-center space-x-2 text-lg text-gray-900 dark:text-gray-100"><input type="radio" name="language" value="fr" checked class="accent-blue-600" /><span>French</span></label>
+          <label class="flex items-center space-x-2 text-lg text-gray-900 dark:text-gray-100"><input type="radio" name="language" value="en" class="accent-blue-600" /><span>English</span></label>
+          <label class="flex items-center space-x-2 text-lg text-gray-900 dark:text-gray-100"><input type="radio" name="language" value="zh" class="accent-blue-600" /><span>Chinese</span></label>
         </div>
 
         <button id="btn-back" class="mt-6 px-8 py-3 rounded-xl bg-gray-300 text-gray-900 font-medium text-lg hover:bg-gray-400 dark:bg-gray-600 dark:text-white dark:hover:bg-gray-500 transition">
-          Retour
+          Back
         </button>
       </div>
     </main>
 
     <script type="module">
-      /* ----------- navigation vues SPA ----------- */
+      /* ----------- SPA navigation ----------- */
       const loginBtn       = document.getElementById("btn-login");
       const settingsBtn    = document.getElementById("btn-settings");
       const backBtn        = document.getElementById("btn-back");
       const toSignUpBtn    = document.getElementById("btn-to-signup");
 
-      const mainButtons    = document.getElementById("main-buttons");
-      const loginOptions   = document.getElementById("login-options");
-      const signupForm     = document.getElementById("signup-form");
+      const mainButtons      = document.getElementById("main-buttons");
+      const loginOptions     = document.getElementById("login-options");
+      const signupForm       = document.getElementById("signup-form");
       const languageSettings = document.getElementById("language-settings");
 
       function showView(view) {
@@ -89,10 +89,10 @@
         else mainButtons.classList.remove("hidden");
       }
 
-      loginBtn     .addEventListener("click", () => { history.pushState({ page:"login" }, "", "login");     showView("login"); });
-      settingsBtn  .addEventListener("click", () => { history.pushState({ page:"settings" }, "", "settings"); showView("settings"); });
-      backBtn      .addEventListener("click", () => { history.pushState({ page:"home" }, "", "home");       showView("home"); });
-      toSignUpBtn  .addEventListener("click", () => { history.pushState({ page:"signup" }, "", "signup");   showView("signup"); });
+      loginBtn    .addEventListener("click", () => { history.pushState({ page:"login" },     "", "login");     showView("login"); });
+      settingsBtn .addEventListener("click", () => { history.pushState({ page:"settings" },  "", "settings");  showView("settings"); });
+      backBtn     .addEventListener("click", () => { history.pushState({ page:"home" },      "", "home");      showView("home"); });
+      toSignUpBtn .addEventListener("click", () => { history.pushState({ page:"signup" },    "", "signup");    showView("signup"); });
 
       window.addEventListener("popstate", e => showView(e.state?.page || "home"));
 
@@ -102,48 +102,54 @@
         if (!history.state) history.replaceState({ page: hash || "home" }, "", location.href);
       });
 
-      /* ----------- Inscription ----------- */
+      /* ----------- Sign-up ----------- */
       const signupBtn = document.getElementById("btn-valid-signup");
       signupBtn.addEventListener("click", async () => {
-        const inputs = signupForm.querySelectorAll("input");
-        const pseudo    = inputs[0].value.trim();
-        const email     = inputs[1].value.trim();
-        const password  = inputs[2].value.trim();
+        const inputs   = signupForm.querySelectorAll("input");
+        const pseudo   = inputs[0].value.trim();
+        const email    = inputs[1].value.trim();
+        const password = inputs[2].value.trim();
 
-        if (!pseudo || !email || !password) { alert("Tous les champs sont requis"); return; }
+        if (!pseudo || !email || !password) {
+          alert("All fields are required");
+          return;
+        }
 
         try {
-          const res  = await fetch("http://localhost:3000/api/register", {
+          const res = await fetch("http://localhost:3000/api/register", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password })   // le backend ignore pseudo pour l'instant
+            body: JSON.stringify({ pseudo, email, password })
           });
           const data = await res.json();
 
           if (res.ok) {
-            alert("Inscription réussie !");
-            history.pushState({ page:"login" }, "", "#login");
+            alert("Signup successful!");
+            history.pushState({ page: "login" }, "", "#login");
             showView("login");
           } else {
-            alert(data.error || "Erreur lors de l'inscription");
+            alert(data.error || "Signup error");
           }
         } catch (err) {
           console.error(err);
-          alert("Erreur réseau");
+          alert("Network error");
         }
       });
 
-      /* ----------- Connexion ----------- */
+      /* ----------- Login ----------- */
       const signinBtn = document.getElementById("btn-signin");
       signinBtn.addEventListener("click", async () => {
         const inputs = loginOptions.querySelectorAll("input");
-        const email     = inputs[0].value.trim();
-        const password  = inputs[1].value.trim();
+        const email    = inputs[0].value.trim();
+        const password = inputs[1].value.trim();
 
-        if (!email || !password) { alert("Email et mot de passe requis"); return; }
+        if (!email || !password) {
+          alert("Email and password are required");
+          return;
+        }
 
         try {
-          const res  = await fetch("http://localhost:3000/api/login", {
+          const res = await fetch("http://localhost:3000/api/login", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email, password })
@@ -152,15 +158,15 @@
 
           if (res.ok) {
             localStorage.setItem("authToken", data.token);
-            alert("Connexion réussie !");
+            alert("Login successful!");
             showView("home");
-            // ici tu peux appeler /api/me pour afficher le profil
+            // you could now call /api/me to display the profile
           } else {
-            alert(data.error || "Erreur de connexion");
+            alert(data.error || "Login error");
           }
         } catch (err) {
           console.error(err);
-          alert("Erreur réseau");
+          alert("Network error");
         }
       });
     </script>

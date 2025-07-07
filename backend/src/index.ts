@@ -13,72 +13,96 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function main() {
-  const app = fastify();
+  const app = fastify({ logger: true });
   const PORT = 3000;
 
-  await app.register(fastifyCors, {
-    origin: true, // autorise toutes les origines
-  });
+  // CORS — toutes origines en dev
+  await app.register(fastifyCors, { origin: true });
 
+  // JWT
   app.register(fastifyJwt, {
     secret: process.env.JWT_SECRET || "devsecret123",
     sign: { expiresIn: "1h" },
   });
 
-  // Créer le dossier data si nécessaire
+  // Dossier data (si DB locale)
   mkdirSync("./data", { recursive: true });
 
-  // Connexion à la base de données
-  const db = new Database("./data/main.db");
+  // Chemin de la base (var env ou défaut)
+  const dbPath = process.env.DB_PATH || "./data/main.db";
+
+  // Connexion SQLite
+  const db = new Database(dbPath);
   app.decorate("db", db);
 
-  // Appliquer la migration SQL
-    const migrationPath = path.join(__dirname, "../migrations/001_create_users.sql");
-    console.log("Chemin migration :", migrationPath, "existe ?", fs.existsSync(migrationPath));
+  // Migration 001 (crée la table avec pseudo NOT NULL UNIQUE)
+  const migrationPath = path.join(__dirname, "../migrations/001_create_users.sql");
+  if (fs.existsSync(migrationPath)) {
+    try {
+      db.exec(fs.readFileSync(migrationPath, "utf8"));
+      app.log.info("✅ Migration SQL appliquée");
+    } catch (e) {
+      app.log.error("❌ Erreur migration", e);
+    }
+  } else {
+    app.log.warn("❌ Fichier migration introuvable : " + migrationPath);
+  }
 
-    if (fs.existsSync(migrationPath)) {
-      try {
-        const sql = fs.readFileSync(migrationPath, "utf8");
-        db.exec(sql);
-        console.log("✅ Migration SQL appliquée");
-      } catch (e) {
-        console.error("❌ Erreur pendant l'exécution de la migration :", e);
-      }
-    } else {
-      console.error("❌ Fichier SQL introuvable :", migrationPath);
+  /* ------------------------------------------------------------------
+   *  ROUTE D'INSCRIPTION
+   * ----------------------------------------------------------------*/
+  app.post("/api/register", async (req, rep) => {
+    console.log("🛬 register body ➜", req.body);
+    const { pseudo, email, password } = req.body as {
+      pseudo: string;
+      email: string;
+      password: string;
+    };
+
+    if (!pseudo?.trim()) {
+      return rep.code(400).send({ error: "pseudo obligatoire" });
     }
 
-  // Route d'inscription
-  app.post("/api/register", async (req, rep) => {
-    const { email, password } = req.body as { email: string; password: string };
     const hash = await bcrypt.hash(password, 10);
 
     try {
-      db.prepare("INSERT INTO users (email, pwd_hash) VALUES (?, ?)").run(email.toLowerCase(), hash);
+      db.prepare(
+        "INSERT INTO users (email, pwd_hash, pseudo) VALUES (?, ?, ?)"
+      ).run(email.toLowerCase(), hash, pseudo.trim());
+
       return rep.code(201).send({ ok: true });
     } catch (err: any) {
-      console.error("Erreur lors de l'inscription :", err);
-      return rep.code(500).send({ error: "Erreur interne lors de l'inscription" });
+      app.log.error("Erreur inscription", err);
+      if (err.code === "SQLITE_CONSTRAINT_UNIQUE") {
+        return rep.code(409).send({ error: "email ou pseudo déjà utilisé" });
+      }
+      return rep.code(500).send({ error: "Erreur interne" });
     }
   });
 
-  // Route de connexion
+  /* ------------------------------------------------------------------
+   *  ROUTE DE CONNEXION
+   * ----------------------------------------------------------------*/
   app.post("/api/login", async (req, rep) => {
     const { email, password } = req.body as { email: string; password: string };
 
-    const row = db
-      .prepare("SELECT id, pwd_hash FROM users WHERE email = ?")
-      .get(email.toLowerCase()) as { id: number; pwd_hash: string } | undefined;
+    const row = db.prepare(
+      "SELECT id, pwd_hash, pseudo FROM users WHERE email = ?"
+    ).get(email.toLowerCase()) as
+      | { id: number; pwd_hash: string; pseudo: string }
+      | undefined;
 
     if (!row || !(await bcrypt.compare(password, row.pwd_hash))) {
       return rep.code(401).send({ error: "mauvais identifiants" });
     }
 
-    const token = app.jwt.sign({ sub: row.id, email });
+    const token = app.jwt.sign({ sub: row.id, email, pseudo: row.pseudo });
     return { token };
   });
 
-  // Middleware d'authentification
+  /* ------------------------------------------------------------------
+   *  MIDDLEWARE AUTH
+   * ----------------------------------------------------------------*/
   app.decorate("auth", async (req: any, rep: any) => {
     try {
       await req.jwtVerify();
@@ -87,12 +111,14 @@ async function main() {
     }
   });
 
-  // Route protégée
+  /* ------------------------------------------------------------------
+   *  ROUTE PROTÉGÉE
+   * ----------------------------------------------------------------*/
   app.get("/api/me", { preHandler: app.auth }, async (req) => {
-    return { user: req.user };
+    return { user: req.user }; // contient maintenant pseudo
   });
 
-  // Démarrer le serveur
+  // Start server
   app.listen({ port: PORT, host: "0.0.0.0" }, () => {
     console.log(`✅ Serveur en ligne sur http://localhost:${PORT}`);
   });

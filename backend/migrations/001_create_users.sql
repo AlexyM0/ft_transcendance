@@ -1,5 +1,6 @@
 CREATE TABLE IF NOT EXISTS users (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  pseudo      TEXT    NOT NULL UNIQUE,
   email       TEXT    NOT NULL UNIQUE,
   pwd_hash    TEXT    NOT NULL,
   is2fa       INTEGER NOT NULL DEFAULT 0,
