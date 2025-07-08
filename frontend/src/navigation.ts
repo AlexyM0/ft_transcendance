@@ -1,9 +1,11 @@
 // navigation.ts
 
+
 import { renderHomeView } 		from "./home.ts";
 import { renderLoginView }		from "./login.ts";
 import { renderSignupView }		from "./signup.ts";
 import { renderSettingsView }	from "./settings.ts";
+import { renderUserView  } 		from "./userview.ts";
 import { renderGameView }		from "./game.ts";
 
 let app: HTMLElement;
@@ -39,6 +41,7 @@ function showView(view: string)
 		case "signup":		renderSignupView(app);	break;
 		case "settings":	renderSettingsView(app);	break;
 		case "game":		renderGameView(app);		break;
+		case "user":		renderUserView(app);		break;
 		default:			renderHomeView(app);		break;
 	}
 }

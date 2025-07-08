@@ -5,18 +5,21 @@ import { navigateTo } from "./navigation";
 export function renderSignupView(container : HTMLElement)
 {
 	container.innerHTML = `
-		<div id="signup-form" class="flex flex-col items-center space-y-6 bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl w-full max-w-sm">
-			<input id="input-pseudo" type="text"     placeholder="Pseudo"          class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
-			<input id="input-email" type="email"    placeholder="Adresse mail"    class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
-			<input id="input-password" type="password" placeholder="Mot de passe"    class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
-		
-			<button class="w-full px-6 py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition">
-			Sign up with Google
-			</button>
-		
-			<button id="btn-valid-signup" class="w-full px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
-			Valider l'inscription
-			</button>
+		<div class="relative flex justify-center items-center min-h-screen text-white bg-gradient-to-br from-black via-gray-900 to-gray-800 overflow-hidden">
+			
+			<div id="signup-form" class="flex flex-col items-center space-y-6 bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl w-full max-w-sm">
+				<input id="input-pseudo" type="text"     placeholder="Pseudo"          class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
+				<input id="input-email" type="email"    placeholder="Adresse mail"    class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
+				<input id="input-password" type="password" placeholder="Mot de passe"    class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
+			
+				<button class="w-full px-6 py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition">
+				Sign up with Google
+				</button>
+			
+				<button id="btn-valid-signup" class="w-full px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
+				Valider l'inscription
+				</button>
+			</div>
 		</div>
 		`;
 
