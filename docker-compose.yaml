@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   db:
     build: ./db
@@ -18,13 +16,16 @@ services:
       - "3000:3000"                 # API disponible sur localhost:3000
     depends_on: [db]
     networks: [internal]
-
+    
   frontend:
     build: ./frontend
     ports:
       - "8080:80"                   # site servi sur localhost:8080
+      - "5173:5173"                 # for Vite dev server
     depends_on: [backend]
     networks: [internal]
+    volumes:
+      - ./frontend:/web
 
 networks:
   internal:
