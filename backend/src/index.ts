@@ -8,93 +8,153 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { mkdirSync } from "fs";
 
-// Corrige __dirname pour les modules ES
+// Fix __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function main() {
-  const app = fastify();
+  const app = fastify({ logger: true });
   const PORT = 3000;
 
-  await app.register(fastifyCors, {
-    origin: true, // autorise toutes les origines
-  });
+  /* --------------------------------------------------------------
+   *  PLUGINS
+   * --------------------------------------------------------------*/
+  await app.register(fastifyCors, { origin: true }); // allow all origins in dev
 
   app.register(fastifyJwt, {
     secret: process.env.JWT_SECRET || "devsecret123",
     sign: { expiresIn: "1h" },
   });
 
-  // Créer le dossier data si nécessaire
+  /* --------------------------------------------------------------
+   *  DATABASE
+   * --------------------------------------------------------------*/
   mkdirSync("./data", { recursive: true });
-
-  // Connexion à la base de données
-  const db = new Database("./data/main.db");
+  const dbPath = process.env.DB_PATH || "./data/main.db";
+  const db = new Database(dbPath);
   app.decorate("db", db);
 
-  // Appliquer la migration SQL
-    const migrationPath = path.join(__dirname, "../migrations/001_create_users.sql");
-    console.log("Chemin migration :", migrationPath, "existe ?", fs.existsSync(migrationPath));
+  const migrationPath = path.join(
+    __dirname,
+    "../migrations/001_create_users.sql"
+  );
+  if (fs.existsSync(migrationPath)) {
+    try {
+      db.exec(fs.readFileSync(migrationPath, "utf8"));
+      app.log.info("✅ SQL migration applied");
+    } catch (e) {
+      app.log.error("❌ Migration error", e);
+    }
+  } else {
+    app.log.warn("❌ Migration file not found: " + migrationPath);
+  }
 
-    if (fs.existsSync(migrationPath)) {
-      try {
-        const sql = fs.readFileSync(migrationPath, "utf8");
-        db.exec(sql);
-        console.log("✅ Migration SQL appliquée");
-      } catch (e) {
-        console.error("❌ Erreur pendant l'exécution de la migration :", e);
-      }
-    } else {
-      console.error("❌ Fichier SQL introuvable :", migrationPath);
+  /* --------------------------------------------------------------
+   *  VALIDATION CONSTANTS
+   * --------------------------------------------------------------*/
+  const USERNAME_REGEX = /^[A-Za-z0-9_-]{3,30}$/; // 3‑30 chars, alphanum + _ -
+  const EMAIL_REGEX = /^[^@\s]+@[^@\s]+\.[^@\s]+$/i; // simple but solid
+  const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{6,128}$/; // 6‑128, strength
+
+  /* --------------------------------------------------------------
+   *  REGISTER
+   * --------------------------------------------------------------*/
+  app.post("/api/register", async (req, rep) => {
+    const { pseudo, email, password } = req.body as {
+      pseudo: string;
+      email: string;
+      password: string;
+    };
+
+    const pseudoNorm = pseudo?.trim();
+    const emailNorm = email?.trim().toLowerCase();
+
+    // --- Validation ---
+    if (!USERNAME_REGEX.test(pseudoNorm || "")) {
+      return rep
+        .code(400)
+        .send({ error: "Username: 3‑30 letters, numbers, _ or -" });
+    }
+    if (!PASSWORD_REGEX.test(password || "")) {
+      return rep.code(400).send({
+        error: "Password 6‑128 chars, with upper, lower and digit",
+      });
+    }
+    if (!EMAIL_REGEX.test(emailNorm || "") || emailNorm.length > 254) {
+      return rep.code(400).send({ error: "Invalid email address" });
     }
 
-  // Route d'inscription
-  app.post("/api/register", async (req, rep) => {
-    const { email, password } = req.body as { email: string; password: string };
+    // --- Duplicate check (graceful) ---
+    const exists = db
+      .prepare("SELECT id FROM users WHERE email = ? OR pseudo = ?")
+      .get(emailNorm, pseudoNorm) as { id: number } | undefined;
+    if (exists) {
+      return rep
+        .code(409)
+        .send({ error: "Email or username already in use" });
+    }
+
     const hash = await bcrypt.hash(password, 10);
 
     try {
-      db.prepare("INSERT INTO users (email, pwd_hash) VALUES (?, ?)").run(email.toLowerCase(), hash);
+      db.prepare(
+        "INSERT INTO users (email, pwd_hash, pseudo) VALUES (?, ?, ?)"
+      ).run(emailNorm, hash, pseudoNorm);
+
       return rep.code(201).send({ ok: true });
     } catch (err: any) {
-      console.error("Erreur lors de l'inscription :", err);
-      return rep.code(500).send({ error: "Erreur interne lors de l'inscription" });
+      app.log.error("Registration error", err);
+      return rep.code(500).send({ error: "Internal server error" });
     }
   });
 
-  // Route de connexion
+  /* --------------------------------------------------------------
+   *  LOGIN
+   * --------------------------------------------------------------*/
   app.post("/api/login", async (req, rep) => {
-    const { email, password } = req.body as { email: string; password: string };
+    const { email, password } = req.body as {
+      email: string;
+      password: string;
+    };
 
-    const row = db
-      .prepare("SELECT id, pwd_hash FROM users WHERE email = ?")
-      .get(email.toLowerCase()) as { id: number; pwd_hash: string } | undefined;
+    const emailNorm = email.trim().toLowerCase();
+
+    const row = db.prepare(
+      "SELECT id, pwd_hash, pseudo FROM users WHERE email = ?"
+    ).get(emailNorm) as | {
+      id: number;
+      pwd_hash: string;
+      pseudo: string;
+    } | undefined;
 
     if (!row || !(await bcrypt.compare(password, row.pwd_hash))) {
-      return rep.code(401).send({ error: "mauvais identifiants" });
+      return rep.code(401).send({ error: "Invalid credentials" });
     }
 
-    const token = app.jwt.sign({ sub: row.id, email });
+    const token = app.jwt.sign({ sub: row.id, email: emailNorm, pseudo: row.pseudo });
     return { token };
   });
 
-  // Middleware d'authentification
+  /* --------------------------------------------------------------
+   *  AUTH MIDDLEWARE & PROTECTED ENDPOINT
+   * --------------------------------------------------------------*/
   app.decorate("auth", async (req: any, rep: any) => {
     try {
       await req.jwtVerify();
     } catch {
-      return rep.code(401).send({ error: "token manquant / invalide" });
+      return rep.code(401).send({ error: "Missing or invalid token" });
     }
   });
 
-  // Route protégée
   app.get("/api/me", { preHandler: app.auth }, async (req) => {
     return { user: req.user };
   });
 
-  // Démarrer le serveur
+  /* --------------------------------------------------------------
+   *  SERVER START
+   * --------------------------------------------------------------*/
   app.listen({ port: PORT, host: "0.0.0.0" }, () => {
-    console.log(`✅ Serveur en ligne sur http://localhost:${PORT}`);
+    console.log(`✅ Server up on http://localhost:${PORT}`);
   });
 }
 
