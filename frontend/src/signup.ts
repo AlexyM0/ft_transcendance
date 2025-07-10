@@ -38,7 +38,7 @@ async function handleSignupButton()
 		const res  = await fetch("http://localhost:3000/api/register", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ email, password })   // le backend ignore pseudo pour l'instant
+			body: JSON.stringify({ pseudo, email, password })
 		});
 		const data = await res.json();
 		
