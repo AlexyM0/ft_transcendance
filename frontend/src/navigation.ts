@@ -19,7 +19,7 @@ export	function setupNavigation()
 		showView(hash || "home");
 		if (!history.state) history.replaceState({ page: hash || "home" }, "", location.href);
 	});
-
+	 window.addEventListener("google-login-success", () => navigateTo("home"));
 	window.addEventListener("popstate", e => showView(e.state?.page || "home"));
 }
 

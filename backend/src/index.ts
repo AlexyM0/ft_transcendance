@@ -7,6 +7,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { mkdirSync } from "fs";
+import { OAuth2Client } from "google-auth-library";
 
 // Fix __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -34,10 +35,7 @@ async function main() {
   const db = new Database(dbPath);
   app.decorate("db", db);
 
-  const migrationPath = path.join(
-    __dirname,
-    "../migrations/001_create_users.sql"
-  );
+  const migrationPath = path.join(__dirname, "../migrations/001_create_users.sql");
   if (fs.existsSync(migrationPath)) {
     try {
       db.exec(fs.readFileSync(migrationPath, "utf8"));
@@ -52,9 +50,17 @@ async function main() {
   /* --------------------------------------------------------------
    *  VALIDATION CONSTANTS
    * --------------------------------------------------------------*/
-  const USERNAME_REGEX = /^[A-Za-z0-9_-]{3,30}$/; // 3‑30 chars, alphanum + _ -
-  const EMAIL_REGEX = /^[^@\s]+@[^@\s]+\.[^@\s]+$/i; // simple but solid
-  const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{6,128}$/; // 6‑128, strength
+  const USERNAME_REGEX = /^[A-Za-z0-9_-]{3,30}$/;       // 3-30 chars, alphanum + _ -
+  const EMAIL_REGEX    = /^[^@\s]+@[^@\s]+\.[^@\s]+$/i; // simple but solid
+  const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{6,128}$/; // 6-128
+
+  /* --------------------------------------------------------------
+   *  GOOGLE
+   * --------------------------------------------------------------*/
+  const GOOGLE_CLIENT_ID =
+    process.env.GOOGLE_CLIENT_ID ||
+    "215313879090-rshrl885bbbjmun6mcb1mmqao4vcl55g.apps.googleusercontent.com";
+  const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
   /* --------------------------------------------------------------
    *  REGISTER
@@ -67,40 +73,29 @@ async function main() {
     };
 
     const pseudoNorm = pseudo?.trim();
-    const emailNorm = email?.trim().toLowerCase();
+    const emailNorm  = email?.trim().toLowerCase();
 
-    // --- Validation ---
+    // Validation
     if (!USERNAME_REGEX.test(pseudoNorm || "")) {
-      return rep
-        .code(400)
-        .send({ error: "Username: 3‑30 letters, numbers, _ or -" });
+      return rep.code(400).send({ error: "Username: 3-30 letters, numbers, _ or -" });
     }
     if (!PASSWORD_REGEX.test(password || "")) {
-      return rep.code(400).send({
-        error: "Password 6‑128 chars, with upper, lower and digit",
-      });
+      return rep.code(400).send({ error: "Password 6-128 chars, with upper, lower and digit" });
     }
     if (!EMAIL_REGEX.test(emailNorm || "") || emailNorm.length > 254) {
       return rep.code(400).send({ error: "Invalid email address" });
     }
 
-    // --- Duplicate check (graceful) ---
-    const exists = db
-      .prepare("SELECT id FROM users WHERE email = ? OR pseudo = ?")
-      .get(emailNorm, pseudoNorm) as { id: number } | undefined;
+    // Duplicate check
+    const exists = db.prepare("SELECT id FROM users WHERE email = ? OR pseudo = ?").get(emailNorm, pseudoNorm) as { id: number } | undefined;
     if (exists) {
-      return rep
-        .code(409)
-        .send({ error: "Email or username already in use" });
+      return rep.code(409).send({ error: "Email or username already in use" });
     }
 
     const hash = await bcrypt.hash(password, 10);
 
     try {
-      db.prepare(
-        "INSERT INTO users (email, pwd_hash, pseudo) VALUES (?, ?, ?)"
-      ).run(emailNorm, hash, pseudoNorm);
-
+      db.prepare("INSERT INTO users (email, pwd_hash, pseudo) VALUES (?, ?, ?)").run(emailNorm, hash, pseudoNorm);
       return rep.code(201).send({ ok: true });
     } catch (err: any) {
       app.log.error("Registration error", err);
@@ -109,23 +104,15 @@ async function main() {
   });
 
   /* --------------------------------------------------------------
-   *  LOGIN
+   *  LOGIN (classic)
    * --------------------------------------------------------------*/
   app.post("/api/login", async (req, rep) => {
-    const { email, password } = req.body as {
-      email: string;
-      password: string;
-    };
-
+    const { email, password } = req.body as { email: string; password: string };
     const emailNorm = email.trim().toLowerCase();
 
-    const row = db.prepare(
-      "SELECT id, pwd_hash, pseudo FROM users WHERE email = ?"
-    ).get(emailNorm) as | {
-      id: number;
-      pwd_hash: string;
-      pseudo: string;
-    } | undefined;
+    const row = db.prepare("SELECT id, pwd_hash, pseudo FROM users WHERE email = ?").get(emailNorm) as
+      | { id: number; pwd_hash: string; pseudo: string }
+      | undefined;
 
     if (!row || !(await bcrypt.compare(password, row.pwd_hash))) {
       return rep.code(401).send({ error: "Invalid credentials" });
@@ -133,6 +120,31 @@ async function main() {
 
     const token = app.jwt.sign({ sub: row.id, email: emailNorm, pseudo: row.pseudo });
     return { token };
+  });
+
+  /* --------------------------------------------------------------
+   *  LOGIN (Google OAuth)
+   * --------------------------------------------------------------*/
+  app.post("/api/login/google", async (req, rep) => {
+    const { id_token } = req.body as { id_token: string };
+
+    try {
+      const ticket  = await googleClient.verifyIdToken({ idToken: id_token, audience: GOOGLE_CLIENT_ID });
+      const payload = ticket.getPayload();
+      if (!payload?.email) throw new Error("no email");
+
+      const email  = payload.email.toLowerCase();
+      const pseudo = payload.given_name || email.split("@")[0];
+
+      // upsert user
+      db.prepare("INSERT OR IGNORE INTO users (email, pseudo, pwd_hash) VALUES (?, ?, '')").run(email, pseudo);
+      const { id } = db.prepare("SELECT id FROM users WHERE email = ?").get(email) as { id: number };
+
+      const token = app.jwt.sign({ sub: id, email, pseudo });
+      return { token };
+    } catch {
+      return rep.code(401).send({ error: "Invalid Google token" });
+    }
   });
 
   /* --------------------------------------------------------------
