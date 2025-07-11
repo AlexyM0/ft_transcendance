@@ -1,6 +1,8 @@
 // login.ts
 
 import { navigateTo } from "./navigation";
+ 
+declare const google: any;
 
 export function renderLoginView(container: HTMLElement)
 {
@@ -10,7 +12,8 @@ export function renderLoginView(container: HTMLElement)
 				<input id="input-email" type="email"     placeholder="Adresse mail" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
 				<input id="input-password" type="password"  placeholder="Mot de passe" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 dark:bg-gray-700 dark:text-white" />
 
-				<button class="w-full px-6 py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition">
+				<button id="btn-google"
+				class="w-full px-6 py-3 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition">
 				Sign in with Google
 				</button>
 
@@ -27,6 +30,7 @@ export function renderLoginView(container: HTMLElement)
 
 		document.getElementById("btn-signin")?.addEventListener("click", async () => handleSigninButton());
 		document.getElementById("btn-to-signup")?.addEventListener("click", () => navigateTo("signup"));
+		document.getElementById("btn-google")?.addEventListener("click", () => { google?.accounts?.id && google.accounts.id.prompt();});
 }
 
 
