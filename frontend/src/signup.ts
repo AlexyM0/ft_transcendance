@@ -47,6 +47,30 @@ export function renderSignupView(container: HTMLElement): void {
     });
 }
 
+async function handleGoogleSignup(resp: google.accounts.id.CredentialResponse) {
+  try {
+    // On envoie le jeton JWT de Google à ton back pour créer le compte
+    const r  = await fetch("http://localhost:3000/api/register/google", {
+      method : "POST",
+      headers: { "Content-Type": "application/json" },
+      body   : JSON.stringify({ credential: resp.credential }),
+    });
+    const data = await r.json();
+
+    if (r.ok) {
+      localStorage.setItem("authToken", data.token);      // si besoin
+      alert("Login with Google successful!");
+      navigateTo("home");                                 // ou "login" selon ton UX
+    } else {
+      alert(data.error || "Registration error");
+    }
+  } catch (e) {
+    console.error(e);
+    alert("Network error");
+  }
+}
+
+
 /* ---------- classic sign-up ---------- */
 async function handleSignupButton(): Promise<void> {
   const pseudo   = (document.getElementById("input-pseudo")   as HTMLInputElement).value.trim();
