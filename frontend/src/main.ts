@@ -1,4 +1,9 @@
+//-----------------------------------------------------------------
+//  main.ts – SPA bootstrap + Google OIDC  (i18n ready)
+//-----------------------------------------------------------------
 import { setupNavigation, navigateTo } from "./navigation";
+import { t } from "./i18n";
+
 
 /* ---------- Clé Google ---------- */
 const GOOGLE_CLIENT_ID =
@@ -8,16 +13,16 @@ const GOOGLE_CLIENT_ID =
 setupNavigation();
 
 /* ---------- Initialisation SDK Google ---------- */
-window.addEventListener("DOMContentLoaded", () => {
+window.addEventListener("DOMContentLoaded", async () => {
   if (!window.google?.accounts?.id) {
-    console.error("SDK Google non chargé");
+    console.error(await t("google.sdk_missing"));   // log technique, pas alert
     return;
   }
 
   google.accounts.id.initialize({
     client_id: GOOGLE_CLIENT_ID,
-    callback: handleGoogleCredential,
-    ux_mode: "popup",
+    callback : handleGoogleCredential,
+    ux_mode  : "popup",
   });
 });
 
@@ -29,27 +34,25 @@ async function handleGoogleCredential(
 
   try {
     const r = await fetch("http://localhost:3000/api/login/google", {
-      method: "POST",
+      method : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id_token: idToken }),
+      body   : JSON.stringify({ id_token: idToken }),
     });
     const data = await r.json();
 
     if (r.ok) {
-      localStorage.setItem("authToken", data.token);
+      localStorage.setItem("authToken", data.sessionToken ?? data.token);
 
       // Informe le routeur que la connexion est terminée
       window.dispatchEvent(new CustomEvent("google-login-success"));
 
-      // Option : redirection directe si ton routeur ne gère pas l'event
       navigateTo("home");
 
-      alert("Registration with Google successful!");
+      alert(await t("google.success"));
     } else {
-      alert(data.error || "Connexion Google impossible");
+      alert(data.error || (await t("google.error")));
     }
-  } catch (e) {
-    console.error(e);
-    alert("Erreur réseau");
+  } catch {
+    alert(await t("network_error"));
   }
 }

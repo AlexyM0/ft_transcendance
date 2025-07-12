@@ -2,10 +2,9 @@
  *  Sign‑up view (classic credentials + Google OIDC)
  ******************************************************************/
 
+import { t } from "./i18n";
 import { navigateTo } from "./navigation";
 
-// @types/google.accounts facultatif
-/* global google */
 
 /* ---------- regex identiques au back ---------- */
 const USER_RE  = /^[A-Za-z0-9_-]{3,30}$/;
