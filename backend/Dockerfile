@@ -1,10 +1,37 @@
-FROM python:3.11-slim
+# ---------- étape build ----------
+FROM node:20-alpine AS build
+
+# Outils nécessaires à la compilation de modules natifs (ex: better-sqlite3)
+RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copie des fichiers essentiels avant le reste pour optimiser le cache
+COPY package.json tsconfig.json ./
+COPY src ./src
+COPY migrations ./migrations
 
-COPY ./app ./app
+# Installation des dépendances, avec recompilation explicite de better-sqlite3
+RUN npm install --build-from-source better-sqlite3 \
+ && npm install
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Transpilation du TypeScript vers JavaScript
+RUN npm run build
+
+# ---------- étape runtime ----------
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/migrations ./migrations
+
+ENV NODE_ENV=production
+ENV DB_PATH=/data/main.db
+ENV PORT=8000
+
+VOLUME /data
+EXPOSE 8000
+
+CMD ["node", "dist/index.js"]
