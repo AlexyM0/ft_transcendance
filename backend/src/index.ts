@@ -11,7 +11,6 @@ import { mkdirSync } from "fs";
 import multer from "multer";
 import { promises as fsPromises } from "fs";
 
-// Fix __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -115,7 +114,6 @@ async function main() {
 		const pseudoNorm = pseudo?.trim();
 		const emailNorm = email?.trim().toLowerCase();
 
-		// --- Validation ---
 		if (!USERNAME_REGEX.test(pseudoNorm || "")) {
 			return rep
 				.code(400)
@@ -130,7 +128,6 @@ async function main() {
 			return rep.code(400).send({ error: "Invalid email address" });
 		}
 
-		// --- Duplicate check (graceful) ---
 		const exists = db
 			.prepare("SELECT id FROM users WHERE email = ? OR pseudo = ?")
 			.get(emailNorm, pseudoNorm) as { id: number } | undefined;
@@ -196,7 +193,6 @@ async function main() {
 		return { user: req.user };
 	});
 
-	// PUT /api/users/me - Mettre à jour son profil
 	app.put("/api/users/me", { preHandler: app.auth }, async (req, rep) => {
 		const { pseudo, email } = req.body as {
 			pseudo?: string;
@@ -206,7 +202,6 @@ async function main() {
 		const user = req.user as { sub: number; pseudo: string; email: string };
 		const userId = user.sub;
 
-		// Au moins un champ doit être fourni
 		if (!pseudo && !email) {
 			return rep.code(400).send({ error: "At least one field (pseudo or email) must be provided" });
 		}
@@ -214,7 +209,6 @@ async function main() {
 		const pseudoNorm = pseudo?.trim();
 		const emailNorm = email?.trim().toLowerCase();
 
-		// --- Validation des nouveaux champs ---
 		if (pseudoNorm && !USERNAME_REGEX.test(pseudoNorm)) {
 			return rep.code(400).send({ error: "Username: 3‑30 letters, numbers, _ or -" });
 		}
@@ -223,7 +217,6 @@ async function main() {
 			return rep.code(400).send({ error: "Invalid email address" });
 		}
 
-		// --- Vérifier les doublons (exclure l'utilisateur actuel) ---
 		if (pseudoNorm || emailNorm) {
 			const conditions = [];
 			const params = [];
@@ -236,7 +229,7 @@ async function main() {
 				conditions.push("email = ?");
 				params.push(emailNorm);
 			}
-			params.push(userId); // Pour la condition WHERE id != ?
+			params.push(userId);
 
 			const exists = db.prepare(
 				`SELECT id FROM users WHERE (${conditions.join(" OR ")}) AND id != ?`
@@ -247,7 +240,6 @@ async function main() {
 			}
 		}
 
-		// --- Mise à jour des champs ---
 		try {
 			const updates = [];
 			const updateParams = [];
@@ -260,7 +252,7 @@ async function main() {
 				updates.push("email = ?");
 				updateParams.push(emailNorm);
 			}
-			updateParams.push(userId); // Pour la condition WHERE
+			updateParams.push(userId);
 
 			const result = db.prepare(
 				`UPDATE users SET ${updates.join(", ")} WHERE id = ?`
@@ -270,7 +262,6 @@ async function main() {
 				return rep.code(404).send({ error: "User not found" });
 			}
 
-			// Récupérer les nouvelles données utilisateur
 			const updatedUser = db.prepare(
 				"SELECT id, pseudo, email, created_at FROM users WHERE id = ?"
 			).get(userId) as {
@@ -305,7 +296,6 @@ async function main() {
 			return rep.code(400).send({ error: "Invalid user ID" });
 		}
 
-		// Récupérer les infos utilisateur avec avatar
 		const user = db.prepare(
 			"SELECT id, pseudo, email, created_at, avatar_url FROM users WHERE id = ?"
 		).get(userId) as {
@@ -320,13 +310,11 @@ async function main() {
 			return rep.code(404).send({ error: "User not found" });
 		}
 
-		// Récupérer les stats (créer si n'existent pas)
 		let stats = db.prepare(
 			"SELECT * FROM user_stats WHERE user_id = ?"
 		).get(userId) as any;
 
 		if (!stats) {
-			// Créer les stats si elles n'existent pas
 			db.prepare(
 				"INSERT INTO user_stats (user_id) VALUES (?)"
 			).run(userId);
@@ -392,7 +380,6 @@ async function main() {
 			match_type?: string;
 		};
 
-		// Validation
 		if (!player1_id || !player2_id || player1_score < 0 || player2_score < 0) {
 			return rep.code(400).send({ error: "Invalid match data" });
 		}
@@ -401,31 +388,26 @@ async function main() {
 			return rep.code(400).send({ error: "Players cannot be the same" });
 		}
 
-		// Déterminer le gagnant
 		const winner_id = player1_score > player2_score ? player1_id : 
 										 player2_score > player1_score ? player2_id : null;
 
 		try {
-			// Enregistrer le match
 			const matchResult = db.prepare(`
 				INSERT INTO match_history 
 				(player1_id, player2_id, winner_id, player1_score, player2_score, match_type, duration)
 				VALUES (?, ?, ?, ?, ?, ?, ?)
 			`).run(player1_id, player2_id, winner_id, player1_score, player2_score, match_type || '1v1', 0);
 
-			// Mettre à jour les stats des joueurs
 			const updateStats = (playerId: number, isWinner: boolean, score: number) => {
 				const currentStats = db.prepare(
 					"SELECT * FROM user_stats WHERE user_id = ?"
 				).get(playerId);
 
 				if (!currentStats) {
-					// Créer les stats si elles n'existent pas
 					db.prepare(
 						"INSERT INTO user_stats (user_id, wins, losses, games_played, total_score, best_score) VALUES (?, ?, ?, ?, ?, ?)"
 					).run(playerId, isWinner ? 1 : 0, isWinner ? 0 : 1, 1, score, score);
 				} else {
-					// Mettre à jour les stats existantes
 					db.prepare(`
 						UPDATE user_stats 
 						SET wins = wins + ?, 
@@ -445,7 +427,6 @@ async function main() {
 				}
 			};
 
-			// Mettre à jour les stats des deux joueurs
 			updateStats(player1_id, winner_id === player1_id, player1_score);
 			updateStats(player2_id, winner_id === player2_id, player2_score);
 
@@ -491,7 +472,6 @@ async function main() {
 
 		const user = req.user as { sub: number };
 		
-		// Validation
 		if (!name || name.trim().length < 3) {
 			return rep.code(400).send({ error: "Tournament name must be at least 3 characters" });
 		}
@@ -539,7 +519,6 @@ async function main() {
 			return rep.code(404).send({ error: "Tournament not found" });
 		}
 
-		// Récupérer les matchs du tournoi
 		const matches = db.prepare(`
 			SELECT 
 				m.*,
@@ -561,11 +540,9 @@ async function main() {
 	 *  MULTER CONFIGURATION - Upload d'avatars
 	 * --------------------------------------------------------------*/
 
-// Créer le dossier uploads si il n'existe pas
 const uploadsDir = path.join(__dirname, "../uploads/avatars");
 await fsPromises.mkdir(uploadsDir, { recursive: true });
 
-// Configuration multer avec types corrects
 const storage = multer.diskStorage({
   destination: (req: any, file: any, cb: any) => {
     cb(null, uploadsDir);
@@ -591,7 +568,6 @@ const upload = multer({
   }
 });
 
-// Servir les fichiers statiques (avatars)
 await app.register(fastifyStatic, {
 	  root: path.join(__dirname, "../uploads"),
 	  prefix: "/uploads/",
@@ -607,7 +583,6 @@ app.post("/api/users/avatar", {
 }, async (req, rep) => {
   const user = req.user as { sub: number };
 
-  // Wrapper pour multer avec Fastify
   const processUpload = () => new Promise<any>((resolve, reject) => {
     upload.single('avatar')(req as any, rep as any, (err: any) => {
       if (err) {
@@ -625,7 +600,6 @@ app.post("/api/users/avatar", {
       return rep.code(400).send({ error: "No file uploaded" });
     }
 
-    // Supprimer l'ancien avatar si ce n'est pas le default
     const currentUser = db.prepare(
       "SELECT avatar_url FROM users WHERE id = ?"
     ).get(user.sub) as { avatar_url: string | null } | undefined;
@@ -642,16 +616,13 @@ app.post("/api/users/avatar", {
       }
     }
 
-    // Renommer le fichier avec l'ID utilisateur
     const extension = path.extname(file.originalname);
     const finalFilename = `user_${user.sub}_${Date.now()}${extension}`;
     const oldPath = file.path;
     const newPath = path.join(uploadsDir, finalFilename);
     
-    // Renommer le fichier
     await fsPromises.rename(oldPath, newPath);
 
-    // Sauvegarder le nouveau chemin en DB
     const avatarUrl = `/uploads/avatars/${finalFilename}`;
     
     db.prepare("UPDATE users SET avatar_url = ? WHERE id = ?")
@@ -687,7 +658,6 @@ app.delete("/api/users/avatar", { preHandler: app.auth }, async (req, rep) => {
         !currentUser.avatar_url.includes('default-avatar.png') &&
         currentUser.avatar_url.startsWith('/uploads/avatars/')) {
       
-      // Supprimer le fichier
       const avatarPath = path.join(__dirname, "..", currentUser.avatar_url);
       try {
         await fsPromises.unlink(avatarPath);
@@ -696,7 +666,6 @@ app.delete("/api/users/avatar", { preHandler: app.auth }, async (req, rep) => {
       }
     }
 
-    // Remettre l'avatar par défaut
     db.prepare("UPDATE users SET avatar_url = ? WHERE id = ?")
       .run('/uploads/avatars/default-avatar.png', user.sub);
 
@@ -721,7 +690,6 @@ app.delete("/api/users/avatar", { preHandler: app.auth }, async (req, rep) => {
 		const user = req.user as { sub: number };
 
 		try {
-			// Récupérer toutes les relations d'amitié
 			const friendsData = db.prepare(`
 				SELECT 
 					uf.id as friendship_id,
@@ -758,7 +726,6 @@ app.delete("/api/users/avatar", { preHandler: app.auth }, async (req, rep) => {
 				friend_avatar: string | null;
 			}>;
 
-			// Organiser par catégorie
 			const friends = friendsData.filter(f => f.status === 'accepted');
 			const sentRequests = friendsData.filter(f => f.status === 'pending' && f.direction === 'sent');
 			const receivedRequests = friendsData.filter(f => f.status === 'pending' && f.direction === 'received');
@@ -795,7 +762,6 @@ app.delete("/api/users/avatar", { preHandler: app.auth }, async (req, rep) => {
 	  }
 
 	  try {
-	    // Vérifier que l'utilisateur cible existe - TYPAGE CORRIGÉ
 	    const targetUser = db.prepare("SELECT id, pseudo FROM users WHERE id = ?").get(friendId) as {
 	      id: number;
 	      pseudo: string;
@@ -805,7 +771,6 @@ app.delete("/api/users/avatar", { preHandler: app.auth }, async (req, rep) => {
 	      return rep.code(404).send({ error: "User not found" });
 	    }
 
-	    // Vérifier qu'il n'y a pas déjà une relation - TYPAGE CORRIGÉ
 	    const existingRelation = db.prepare(
 	      "SELECT id, status FROM user_friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)"
 	    ).get(user.sub, friendId, friendId, user.sub) as {
@@ -821,7 +786,6 @@ app.delete("/api/users/avatar", { preHandler: app.auth }, async (req, rep) => {
 	      }
 	    }
 
-	    // Créer la demande d'ami
 	    db.prepare(
 	      "INSERT INTO user_friends (user_id, friend_id, status) VALUES (?, ?, 'pending')"
 	    ).run(user.sub, friendId);
@@ -837,7 +801,7 @@ app.delete("/api/users/avatar", { preHandler: app.auth }, async (req, rep) => {
 	  }
 	});
 
-	// PUT /api/friends/:id/accept - Accepter une demande d'ami - TYPAGE CORRIGÉ
+	// PUT /api/friends/:id/accept - Accepter une demande d'ami
 	app.put("/api/friends/:id/accept", { preHandler: app.auth }, async (req, rep) => {
 	  const { id } = req.params as { id: string };
 	  const user = req.user as { sub: number };
@@ -848,7 +812,7 @@ app.delete("/api/users/avatar", { preHandler: app.auth }, async (req, rep) => {
 	  }
 
 	  try {
-	    // Vérifier qu'il y a une demande pending à accepter - TYPAGE CORRIGÉ
+	    // Vérifier qu'il y a une demande pending à accepter
 	    const pendingRequest = db.prepare(
 	      "SELECT id FROM user_friends WHERE user_id = ? AND friend_id = ? AND status = 'pending'"
 	    ).get(friendId, user.sub) as { id: number } | undefined;
@@ -857,7 +821,6 @@ app.delete("/api/users/avatar", { preHandler: app.auth }, async (req, rep) => {
 	      return rep.code(404).send({ error: "No pending friend request found" });
 	    }
 
-	    // Accepter la demande
 	    const result = db.prepare(
 	      "UPDATE user_friends SET status = 'accepted' WHERE user_id = ? AND friend_id = ? AND status = 'pending'"
 	    ).run(friendId, user.sub);
@@ -885,7 +848,6 @@ app.delete("/api/users/avatar", { preHandler: app.auth }, async (req, rep) => {
 	  }
 
 	  try {
-	    // Supprimer la relation dans les deux sens
 	    const result = db.prepare(
 	      "DELETE FROM user_friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)"
 	    ).run(user.sub, friendId, friendId, user.sub);
