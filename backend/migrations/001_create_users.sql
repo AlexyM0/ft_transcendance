@@ -3,7 +3,9 @@ CREATE TABLE IF NOT EXISTS users (
   pseudo      TEXT    NOT NULL UNIQUE,
   email       TEXT    NOT NULL UNIQUE,
   pwd_hash    TEXT    NOT NULL,
+  nb_games    INTEGER NOT NULL DEFAULT 0,
   is2fa       INTEGER NOT NULL DEFAULT 0,
+  totp_secret TEXT,  
   locale      TEXT,
   created_at  DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now')),
   updated_at  DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now'))

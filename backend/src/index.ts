@@ -177,41 +177,94 @@ async function main() {
   //  2-FA SETUP  (QR  |  verify  |  skip)
   // ───────────────────────────────────────────────────────────────
   // 1) Obtenir un QR Code
-  app.get("/auth/2fa/qr", { preHandler: stageGuard("setup-2fa") }, async (req: any) => {
-    const secret = speakeasy.generateSecret({ name: "FT_Transcendance" });
-    db.prepare("UPDATE users SET totp_secret = ? WHERE id = ?").run(
-      secret.base32,
-      req.user.sub
-    );
-    const qr = await QRCode.toDataURL(secret.otpauth_url!);
-    return { qr };
-  });
+  // ───────────────────────────────────────────────────────────────
+//  2-FA SETUP  (QR  |  verify  |  skip)
+// ───────────────────────────────────────────────────────────────
 
-  // 2) Vérifier le code et activer la 2FA
-  app.post("/auth/2fa/verify", { preHandler: stageGuard("setup-2fa") }, (req: any, rep) => {
-    const { code } = req.body as { code: string };
-    const row = db
-      .prepare("SELECT totp_secret FROM users WHERE id = ?")
-      .get(req.user.sub) as { totp_secret: string };
+// 1) Obtenir un QR Code
+app.get("/api/auth/2fa/qr", { preHandler: stageGuard("setup-2fa") }, async (req: any, rep) => {
+  try {
+    const userRow = db.prepare("SELECT email, pseudo FROM users WHERE id = ?")
+      .get(req.user.sub) as { email?: string; pseudo?: string } | undefined;
 
-    const ok = speakeasy.totp.verify({
-      token: code,
-      secret: row.totp_secret,
-      encoding: "base32",
-      window: 1,
+    const label = userRow?.email
+      ? `FT_Transcendance:${userRow.email}`
+      : `FT_Transcendance:user${req.user.sub}`;
+
+    const secret = speakeasy.generateSecret({ length: 20 });
+
+    const otpauth_url = speakeasy.otpauthURL({
+      secret: secret.ascii,   // on stocke base32 en DB mais ici on construit l’URL avec ascii
+      label,
+      issuer: "FT_Transcendance",
+      encoding: "ascii",
     });
-    if (!ok) return rep.code(400).send({ error: "Bad code" });
 
-    db.prepare("UPDATE users SET is2fa = 1 WHERE id = ?").run(req.user.sub);
-    const sessionToken = app.jwt.sign({ sub: req.user.sub });
-    return { sessionToken };
-  });
+    // on sauve le secret en base32 pour la vérif TOTP
+    db.prepare("UPDATE users SET totp_secret = ? WHERE id = ?")
+      .run(secret.base32, req.user.sub);
 
-  // 3) L’utilisateur choisit « Plus tard »
-  app.post("/auth/2fa/skip", { preHandler: stageGuard("setup-2fa") }, (req: any) => {
-    const sessionToken = app.jwt.sign({ sub: req.user.sub });
-    return { sessionToken };
+    const qr = await QRCode.toDataURL(otpauth_url);
+    return { qr };
+  } catch (err: any) {
+    app.log.error({ err }, "2FA QR generation failed");
+    return rep.code(500).send({ error: "QR generation failed", detail: err?.message });
+  }
+});
+
+// 2) Vérifier le code et activer la 2FA
+app.post("/api/auth/2fa/verify", { preHandler: stageGuard("setup-2fa") }, (req: any, rep) => {
+  const { code } = req.body as { code: string };
+
+  const row = db.prepare("SELECT totp_secret FROM users WHERE id = ?")
+    .get(req.user.sub) as { totp_secret?: string } | undefined;
+
+  if (!row?.totp_secret) {
+    return rep.code(400).send({ error: "No secret" });
+  }
+
+  const ok = speakeasy.totp.verify({
+    token: code,
+    secret: row.totp_secret,
+    encoding: "base32",
+    window: 1,
   });
+  if (!ok) return rep.code(400).send({ error: "Bad code" });
+
+  db.prepare("UPDATE users SET is2fa = 1 WHERE id = ?").run(req.user.sub);
+  const sessionToken = app.jwt.sign({ sub: req.user.sub });
+  return { sessionToken };
+});
+
+// 3) L’utilisateur choisit « Plus tard »
+app.post("/api/auth/2fa/skip", { preHandler: stageGuard("setup-2fa") }, (req: any) => {
+  const sessionToken = app.jwt.sign({ sub: req.user.sub });
+  return { sessionToken };
+});
+
+// Challenge 2FA pendant le login
+app.post("/api/auth/2fa/login-verify", { preHandler: stageGuard("2fa-challenge") }, (req: any, rep) => {
+  const { code } = req.body as { code: string };
+
+  const row = db.prepare("SELECT totp_secret FROM users WHERE id = ?")
+    .get(req.user.sub) as { totp_secret?: string } | undefined;
+
+  if (!row?.totp_secret) {
+    return rep.code(400).send({ error: "No secret" });
+  }
+
+  const ok = speakeasy.totp.verify({
+    token: code,
+    secret: row.totp_secret,
+    encoding: "base32",
+    window: 1,
+  });
+  if (!ok) return rep.code(400).send({ error: "Bad code" });
+
+  const sessionToken = app.jwt.sign({ sub: req.user.sub });
+  return { sessionToken };
+});
+
 
   // ───────────────────────────────────────────────────────────────
   //  LOGIN classique
