@@ -1,0 +1,8 @@
+backend/db/transcendance.db
+backend/db/transcendance.db-shm
+backend/db/transcendance.db-wal
+backend/node_modules/
+backend/.env
+backend/dist/
+
+frontend/node_modules/
