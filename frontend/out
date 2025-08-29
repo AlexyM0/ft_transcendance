@@ -1,0 +1,1052 @@
+// src/api/auth.ts
+
+/**
+ * Mirrors auth routes. OAuth "start" endpoints are navigations, not XHR
+ */
+
+import { deleteRequest, postRequest } from "./http";
+
+export const AuthAPI = {
+  /**
+   * POST /api/auth/register -> { id }
+   */
+  register: (email: string, pseudo: string, password: string) => {
+    return postRequest<{ id: number }>("/api/auth/register", { email, pseudo, password });
+  },
+
+  /**
+   * POST /api/auth/login -> { success: true } or { require2FA: true }
+   */
+  login: (pseudoOrEmail: string, password: string) => {
+    return postRequest<{ success?: true; require2FA?: true }>("/api/auth/login", { pseudoOrEmail, password });
+  },
+
+  /**
+   * POST /api/auth/logout -> { success: true }
+   */
+  logout: () => {
+    return postRequest<{ success: true }>("/api/auth/logout");
+  },
+
+  /**
+   * OAuth : Backend OAuth API (start functions) are browser navigations
+   * because backend issues a 302 redirection
+   */
+  startGithubOAuth: () => {
+    window.location.assign("/api/auth/oauth/github/start");
+  },
+
+  startGoogleOAuth: () => {
+    window.location.assign("/api/auth/oauth/google/start");
+  },
+
+  start42OAuth: () => {
+    window.location.assign("/api/auth/oauth/42/start");
+  },
+
+  /**
+   * POST /api/auth/2fa/login -> { success: true }
+   */
+  verify2faLogin: (code: string) => {
+    return postRequest<{ success: true }>("/api/auth/2fa/login", { code });
+  },
+
+  /**
+   * POST /api/auth/2fa/setup -> { otpauth, qrDataUrl }
+   */
+  begin2fa: () => {
+    return postRequest<{ otpauth: string; qrDataUrl: string }>("/api/auth/2fa/setup");
+  },
+
+  /**
+   * POST /api/auth/2fa/verify -> { success: true }
+   */
+  verify2faSetup: (code: string) => {
+    return postRequest<{ success: true }>("/api/auth/2fa/verify", { code });
+  },
+
+  /**
+   * DELETE /api/auth/2fa -> { success: true }
+   */
+  disable2fa: () => {
+    return deleteRequest<{ success: true }>("/api/auth/2fa");
+  },
+};
+// src/api/chats.ts
+import { getRequest, postRequest } from "./http";
+import type { ChatListItem, Message, PublicUser } from "./types";
+
+export const ChatsAPI = {
+  /**
+   * GET /api/chats?limit&offset -> { chats, limit, offset }
+   */
+  listMyChats: (limit = 50, offset = 0) => {
+    return getRequest<{ chats: ChatListItem[]; limit: number; offset: number }>("/api/chats", { limit, offset });
+  },
+
+  /**
+   * GET /api/chats/:chatId/messages?limit&offset -> { chatId, messages, limit, offset }
+   */
+  getMessages: (chatId: number, limit = 50, offset = 0) => {
+    return getRequest<{ chatId: Number; messages: Message[]; limit: number; offset: number }>(`/api/chats/${chatId}/messages`, { limit, offset });
+  },
+
+  /**
+   * POST /api/chats/:chatId/messages (body : {body}) -> Message
+   */
+  sendMessage: (chatId: number, body: string) => {
+    return postRequest<Message>(`/api/chats/${chatId}/messages`, { body });
+  },
+
+  /**
+   * POST /api/chats/with/:userId -> { id, peer }
+   */
+  ensureChatWithUser: (userId: number) => {
+    return postRequest<{ id: number; peer: PublicUser }>(`/api/chats/with/${userId}`);
+  },
+
+  /**
+   * POST /api/chats/with/:userId/messages (body: { body }) -> Message
+   */
+  ensureChatAndSend: (userId: number, body: string) => {
+    return postRequest<Message>(`/api/chats/with/${userId}/messages`, { body });
+  },
+};
+// src/api/friends.ts
+
+import { getRequest, postRequest, putRequest, deleteRequest } from "./http";
+import type { PublicUser, FriendRequest } from "./types";
+
+export const FriendsAPI = {
+  /**
+   * GET /api/friends -> { friends }
+   */
+  listFriends: () => {
+    return getRequest<{ friends: PublicUser[] }>("/api/friends");
+  },
+
+  /**
+   * GET /api/friends/requests -> { friendRequests }
+   */
+  listFriendRequests: () => {
+    return getRequest<{ friendRequests: FriendRequest[] }>("/api/friends/requests");
+  },
+
+  /**
+   * POST /api/friends/requests -> { id } (body: {to_user_id})
+   */
+  sendRequest: (toUserId: number) => {
+    return postRequest<{ id: number }>("/api/friends/requests", { to_user_id: toUserId });
+  },
+
+  /**
+   * PUT /api/friends/:requestId -> { success: true }
+   */
+  acceptRequest: (requestId: number) => {
+    return putRequest<{ success: true }>(`/api/friends/requests/${requestId}`);
+  },
+
+  /**
+   * DELETE /api/friends/requests/:requestId -> { success: true }
+   */
+  declineRequest: (requestId: number) => {
+    return deleteRequest<{ success: true }>(`/api/friends/requests/${requestId}`);
+  },
+
+  /**
+   * DELETE /api/friends/:friendId -> { success: true }
+   */
+  removeFriend: (friendId: number) => {
+    return deleteRequest<{ success: true }>(`/api/friends/${friendId}`);
+  },
+};
+// src/api/http.ts
+
+/**
+ * Centralized fetch wrapper :
+ * - sets base URL (env overrideable)
+ * - alway ssends cookies (session JWT)
+ * - normalizes JSON parsing and errors
+ * - tiny helpers for query strings and JSON bodies
+ */
+
+/**
+ * In dev we can leave this empty and rely on Vite proxy
+ * In prod, set VITE_API_BASE to the domain
+ */
+export const API_BASE = (import.meta as any)?.env?.VITE_API_BASE ?? "";
+
+export class HttpError extends Error {
+  constructor(public status: number, message: string, public body?: unknown) {
+    super(message);
+    this.name = "HttpError";
+  }
+}
+
+/**
+ * Build a query string from an object, skipping null/undefined
+ */
+export function queryString(params?: Record<string, any>): string {
+  if (!params) return "";
+  const entries = Object.entries(params)
+    .filter(([, v]) => v != undefined && v != null)
+    .map(([k, v]) => [k, String(v)]);
+
+  return entries.length ? "?" + new URLSearchParams(entries) : "";
+}
+
+/**
+ * Low-level abstracted function. Called by Http Methods helpers below
+ */
+export async function http<T = unknown>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(API_BASE + path, {
+    // Cookie-based session from backend
+    credentials: "include",
+    // Default headers, potentially overriden
+    headers: { Accept: "application/json", ...(init.headers || {}) },
+    ...init,
+  });
+
+  // Try to parse JSON; tolerate empty bodies or non-JSON errors
+  const text = await res.text();
+
+  function textToJSON(text: string) {
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
+  }
+
+  const data = text ? textToJSON(text) : null;
+
+  if (!res.ok) {
+    const message = (data && typeof data === "object" && (data as any).message) || (data && typeof data === "object" && (data as any).error) || res.statusText;
+    throw new HttpError(res.status, String(message || "HTTP error"), data ?? undefined);
+  }
+  return data as T;
+}
+
+export function getRequest<T>(path: string, params?: Record<string, any>) {
+  return http<T>(path + queryString(params), { method: "GET" });
+}
+
+export function postRequest<T>(path: string, json?: any) {
+  return http<T>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: json !== undefined ? JSON.stringify(json) : undefined,
+  });
+}
+
+export function putRequest<T>(path: string, json?: any) {
+  return http<T>(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: json !== undefined ? JSON.stringify(json) : undefined,
+  });
+}
+
+export function deleteRequest<T>(path: string) {
+  return http<T>(path, { method: "DELETE" });
+}
+// src/api/matches.ts
+import { getRequest, postRequest, putRequest } from "./http";
+import type { Match } from "./types";
+
+export const MatchesAPI = {
+  /**
+   * POST /api/matches (body: { opponentId }) -> Match
+   */
+  create: (opponentId: number) => {
+    return postRequest<Match>("/api/matches", { opponentId });
+  },
+
+  /**
+   * GET /api/matches/:matchId -> Match
+   */
+  get: (matchId: number) => {
+    return getRequest<Match>(`/api/matches/${matchId}`);
+  },
+
+  /**
+   * PUT /api/matches/:matchId/result (body: { scoreP1, scoreP2 }) -> Match
+   */
+  recordResult: (matchId: number, scoreP1: number, scoreP2: number) => {
+    return putRequest<Match>(`/api/matches/${matchId}`, { scoreP1, scoreP2 });
+  },
+
+  /**
+   * PUT /api/matches/:matchId/cancel -> Match
+   */
+  cancel: (matchId: number) => {
+    return putRequest<Match>(`/api/matches/${matchId}/cancel`);
+  },
+};
+// src/api/tournaments.ts
+import { getRequest, postRequest, putRequest } from "./http";
+import type { Tournament, TournamentDetails } from "./types";
+
+export const TournamentsAPI = {
+  /**
+   * GET /api/tournaments?limit&offset -> { tournaments, limit, offset }
+   */
+  listTournaments: (limit = 50, offset = 0) => {
+    return getRequest<{ tournaments: Tournament[]; limit: number; offset: number }>("/api/tournaments", { limit, offset });
+  },
+
+  /**
+   * POST /api/tournaments -> Tournament
+   */
+  createTournament: (title: string, description: string | null = null, maxPlayers = 8) => {
+    return postRequest<Tournament>("/api/tournaments", { title, description, maxPlayers });
+  },
+
+  /**
+   * GET /api/tournaments/:tournamentId -> Tournament Details
+   */
+  getDetails: (tournamentId: number) => {
+    return getRequest<TournamentDetails>(`/api/tournaments/${tournamentId}`);
+  },
+
+  /**
+   * POST /api/tournaments/:tournamentId/join -> { success: true}
+   */
+  joinTournament: (tournamentId: number) => {
+    return postRequest<{ success: true }>(`/api/tournaments/${tournamentId}/join`);
+  },
+
+  /**
+   * PUT /api/tournaments/:matchId/result (body: { scoreP1, scoreP2 }) -> updated match (backend returns "updated")
+   */
+  recordMatchResult: (matchId: number, scoreP1: number, scoreP2: number) => {
+    return putRequest<any>(`/api/tournaments/${matchId}/result`, { scoreP1, scoreP2 });
+  },
+};
+// src/api/types.ts
+/**
+ * Lightweight shapes matching the backend controllers' responses
+ */
+
+export type Me = {
+  id: number;
+  email: string;
+  pseudo: string;
+  avatar_url: string | null;
+};
+
+export type PublicUser = {
+  id: number;
+  pseudo: string;
+  avatar_url: string | null;
+};
+
+export type FriendRequest = {
+  id: number;
+  from_user_id: number;
+  to_user_id: number;
+  created_at: string;
+};
+
+export type ChatPeer = PublicUser;
+
+export type ChatListItem = {
+  id: number;
+  created_at: string;
+  peer: ChatPeer;
+  last_message: null | {
+    id: number;
+    author_id: number;
+    body: string;
+    created_at: string;
+  };
+};
+
+export type Message = {
+  id: number;
+  chat_id: number;
+  author_id: number;
+  body: string;
+  created_at: string;
+};
+
+export type Match = {
+  id: number;
+  player1_id: number;
+  player2_id: number;
+  status: "pending" | "completed" | "canceled";
+  winner_id: number | null;
+  score_P1: number | null;
+  score_P2: number | null;
+  created_at: string;
+};
+
+export type Tournament = {
+  id: number;
+  owner_id: number;
+  title: string;
+  description: string | null;
+  max_players: number;
+  status: "registration" | "running" | "completed";
+  created_at: string;
+};
+
+export type TournamentDetails = {
+  tournament: Tournament;
+  participants: { user_Id: number }[];
+};
+// src/api/users.ts
+import { getRequest, putRequest, deleteRequest } from "./http";
+import type { Me, PublicUser, Match } from "./types";
+
+export const UsersAPI = {
+  /**
+   * GET /api/users/me -> current user
+   */
+  me: () => getRequest<Me>("/api/users/me"),
+
+  /**
+   * PUT /api/users/me -> update pseudo and/or avatar_url
+   */
+  updateMe: (input: { pseudo?: string; avatar_url?: string | null }) => {
+    return putRequest<Me>("/api/users/me", input);
+  },
+
+  /**
+   * PUT /api/users/me/avatar -> set/replace avatar (url based in the backend)
+   */
+  uploadAvatar: (avatar_url: string) => {
+    return putRequest<Me>("/api/users/me", { avatar_url });
+  },
+
+  /**
+   * DELETE /api/users/me/avatar
+   */
+  deleteAvatar: () => deleteRequest<Me>("/api/users/me/avatar"),
+
+  /**
+   * GET /api/users/:id -> public profile
+   */
+  getPublic: (userId: number) => getRequest<PublicUser>(`/api/users/${userId}`),
+
+  /**
+   * GET /api/users/:id/matches?limit&offset -> { matches, limit offset }
+   */
+  listUserMatches: (userId: number, limit = 50, offset = 0) => {
+    return getRequest<{ matches: Match[]; limit: number; offset: number }>(`/api/users/${userId}/matches`, { limit, offset });
+  },
+
+  /**
+   * GET /api/users/search?q&limit&offset -> { users, limit, offset }
+   */
+  searchUser: (q: string, limit = 20, offset = 0) => {
+    return getRequest<{ users: PublicUser[]; limit: number; offset: number }>(`/api/users/search`, { q, limit, offset });
+  },
+};
+// src/store/auth.ts
+import { createStore } from "./createStore";
+import { AuthAPI } from "../api/auth";
+import { UsersAPI } from "./../api/users";
+import type { Me } from "../api/types";
+import { HttpError } from "../api/http";
+
+/**
+ *
+ */
+export type AuthState = {
+  me: Me | null;
+  loading: boolean;
+  twofaRequired: boolean;
+  error: string | null;
+};
+
+export const auth = createStore<AuthState>({
+  me: null,
+  loading: true,
+  twofaRequired: false,
+  error: null,
+});
+
+/**
+ * Bootstrap session from cookie
+ */
+export async function bootstrapSession() {
+  auth.set((s) => ({ ...s, loading: true, error: null }));
+  try {
+    const me = await UsersAPI.me();
+    auth.set((s) => ({ ...s, me: me, loading: false }));
+  } catch {
+    auth.set((s) => ({ ...s, me: null, loading: false }));
+  }
+}
+
+/**
+ * Register
+ */
+export async function register(email: string, pseudo: string, password: string) {
+  return await AuthAPI.register(email, pseudo, password);
+}
+
+/**
+ * Username/password login (may require 2FA)
+ */
+export async function login(pseudoOrEmail: string, password: string) {
+  auth.set((s) => ({ ...s, error: null }));
+  try {
+    const res = await AuthAPI.login(pseudoOrEmail, password);
+    if (res?.require2FA) {
+      auth.set((s) => ({ ...s, twofaRequired: true }));
+      return;
+    }
+    const me = await UsersAPI.me();
+    auth.set((s) => ({ ...s, twofaRequired: false }));
+  } catch (e: any) {
+    const msg = e instanceof HttpError ? `${e.status}: ${e.message}` : "Login failed";
+    auth.set((s) => ({ ...s, error: msg, me: null, twofaRequired: false }));
+    throw e;
+  }
+}
+
+/**
+ * Logout (ignore networks problems; clear local state regardless)
+ */
+export async function logout() {
+  try {
+    await AuthAPI.logout();
+  } catch {}
+  auth.set((s) => ({ ...s, me: null, twofaRequired: false }));
+  location.hash = "/login";
+}
+
+/**
+ * Complete a pending 2FA login
+ */
+export async function verify2faLogin(code: string) {
+  await AuthAPI.verify2faLogin(code);
+  const me = await UsersAPI.me();
+  auth.set((s) => ({ ...s, me, twofaRequired: false }));
+}
+
+/**
+ * Begin 2FA enrollment (returns otpauth + QR) for UI to show
+ */
+export async function begin2fa() {
+  return await AuthAPI.begin2fa();
+}
+
+/**
+ * Verify 2FA setup code the user types
+ */
+export async function verify2faSetup(code: string) {
+  await AuthAPI.verify2faSetup(code);
+}
+
+/**
+ * Disable 2FA
+ */
+export async function disable2fa() {
+  await AuthAPI.disable2fa();
+}
+// src/store/chats.ts
+import { createStore } from "./createStore";
+import { ChatsAPI } from "../api/chats";
+import type { ChatListItem, Message } from "../api/types";
+
+export type ChatsState = {
+  loading: boolean;
+  list: ChatListItem[];
+  limit: number;
+  offset: number;
+
+  messages: Record<number, { loading: boolean; items: Message[]; limit: number; offset: number }>;
+  sending: Record<number, boolean>;
+  error: string | null;
+};
+
+export const chats = createStore<ChatsState>({
+  loading: false,
+  list: [],
+  limit: 50,
+  offset: 0,
+  messages: {},
+  sending: {},
+  error: null,
+});
+
+// Helpers
+function ensureMsgBucket(state: ChatsState, chatId: number) {
+  if (!state.messages[chatId]) {
+    state.messages[chatId] = { loading: false, items: [], limit: 50, offset: 0 };
+  }
+}
+
+// Actions
+export async function loadMyChats(limit = 50, offset = 0) {
+  chats.set((s) => ({ ...s, loading: true, error: null }));
+  try {
+    const res = await ChatsAPI.listMyChats(limit, offset);
+    chats.set((s) => ({ ...s, list: res.chats, limit: res.limit, offset: res.offset, loading: false }));
+  } catch (e: any) {
+    chats.set((s) => ({ ...s, loading: false, error: e?.message ?? "Failed to load chats" }));
+  }
+}
+
+export async function loadMessages(chatId: number, limit = 50, offset = 0) {
+  chats.set((s) => {
+    const copy = { ...s };
+    ensureMsgBucket(copy, chatId);
+    copy.messages[chatId] = { ...copy.messages[chatId], loading: true };
+    return copy;
+  });
+  try {
+    const res = await ChatsAPI.getMessages(chatId, limit, offset);
+    chats.set((s) => {
+      const copy = { ...s };
+      ensureMsgBucket(copy, chatId);
+      copy.messages[chatId] = {
+        loading: false,
+        limit: res.limit,
+        offset: res.offset,
+        items: res.messages,
+      };
+      return copy;
+    });
+  } catch (e: any) {
+    chats.set((s) => {
+      const copy = { ...s };
+      ensureMsgBucket(copy, chatId);
+      copy.messages[chatId] = { ...copy.messages[chatId], loading: false };
+      copy.error = e?.message ?? "Failed to load messages";
+      return copy;
+    });
+  }
+}
+
+export async function sendMessage(chatId: number, body: string) {
+  chats.set((s) => ({ ...s, sending: { ...s.sending, [chatId]: true } }));
+  try {
+    const msg = await ChatsAPI.sendMessage(chatId, body);
+    chats.set((s) => {
+      const copy = { ...s };
+      ensureMsgBucket(copy, chatId);
+      copy.messages[chatId] = {
+        ...copy.messages[chatId],
+        items: [...copy.messages[chatId].items, msg],
+      };
+      // Also refresh the chat list last_message field for this chatId
+      copy.list = copy.list.map((c) => (c.id === chatId ? { ...c, last_message: { id: msg.id, author_id: msg.author_id, body: msg.body, created_at: msg.created_at } } : c));
+      copy.sending = { ...copy.sending, [chatId]: false };
+      return copy;
+    });
+  } catch (e: any) {
+    chats.set((s) => ({ ...s, sending: { ...s.sending, [chatId]: false } }));
+    throw e;
+  }
+}
+
+export async function ensureChatWith(userId: number) {
+  const { id, peer } = await ChatsAPI.ensureChatWithUser(userId);
+
+  // Merge chat into list if missing
+  chats.set((s) => {
+    if (s.list.some((c) => c.id === id)) return s;
+    return { ...s, list: [{ id, created_at: new Date().toISOString(), peer, last_message: null }, ...s.list] };
+  });
+  return id;
+}
+
+export async function ensureChatAndSend(userId: number, body: string) {
+  const msg = await ChatsAPI.ensureChatAndSend(userId, body);
+
+  chats.set((s) => {
+    const copy = { ...s };
+    const existing = copy.list.find((c) => c.id === msg.chat_id);
+    if (!existing) {
+      // We don't know peer data here; safest is to refresh chat list outside or ensureChatWith first
+      copy.list = [{ id: msg.chat_id, created_at: msg.created_at, peer: { id: userId, pseudo: "(loading...)", avatar_url: null }, last_message: null }, ...copy.list];
+    }
+    ensureMsgBucket(copy, msg.chat_id);
+    copy.messages[msg.chat_id].items = [...copy.messages[msg.chat_id].items, msg];
+    return copy;
+  });
+
+  return msg;
+}
+// src/store/createStore.ts
+
+/**
+ * A listener has no arguments : when state changes, it just re-renders
+ */
+type Listener = () => void;
+
+/**
+ * Returns a minimalist state container with get, set and subscribe
+ */
+export function createStore<S>(initial: S) {
+  let state = initial;
+  const listeners = new Set<Listener>();
+
+  return {
+    get(): S {
+      return state;
+    },
+
+    /**
+     * Takes a pure function as a parameter to compute next state from current state
+     */
+    set(updater: (s: S) => S | void): void {
+      const next = updater(state) ?? state;
+      if (next !== state) {
+        state = next as S;
+        listeners.forEach((l) => l());
+      }
+    },
+
+    /**
+     * Adds a function to the set of listeners
+     * Returns a function to unsubscribe from the set of listeners
+     */
+    subscribe(fn: Listener): () => void {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
+  };
+}
+// src/store/friends.ts
+import { createStore } from "./createStore";
+import { FriendsAPI } from "../api/friends";
+import type { PublicUser, FriendRequest } from "../api/types";
+
+export type FriendsState = {
+  loading: boolean;
+  friends: PublicUser[];
+  requestsLoading: boolean;
+  requests: FriendRequest[];
+  error: string | null;
+};
+
+export const friends = createStore<FriendsState>({
+  loading: false,
+  friends: [],
+  requestsLoading: false,
+  requests: [],
+  error: null,
+});
+
+export async function loadFriends() {
+  friends.set((s) => ({ ...s, loading: true, error: null }));
+  try {
+    const res = await FriendsAPI.listFriends();
+    friends.set((s) => ({ ...s, friends: res.friends, loading: false }));
+  } catch (e: any) {
+    friends.set((s) => ({ ...s, loading: false, error: e?.message ?? "Failed to load friends" }));
+  }
+}
+
+export async function loadFriendRequests() {
+  friends.set((s) => ({ ...s, requestsLoading: true, error: null }));
+  try {
+    const res = await FriendsAPI.listFriendRequests();
+    friends.set((s) => ({ ...s, requests: res.friendRequests, requestsLoading: false }));
+  } catch (e: any) {
+    friends.set((s) => ({ ...s, requestsLoading: false, error: e?.message ?? "Failed to load requests" }));
+  }
+}
+
+export async function sendFriendRequest(toUserId: number) {
+  await FriendsAPI.sendRequest(toUserId);
+  await Promise.allSettled([loadFriends(), loadFriendRequests()]);
+}
+
+export async function acceptFriendRequest(requestId: number) {
+  friends.set((s) => ({ ...s, requests: s.requests.filter((r) => r.id !== requestId) }));
+  try {
+    await FriendsAPI.acceptRequest(requestId);
+    await loadFriends();
+  } catch (e: any) {
+    await loadFriendRequests();
+    throw e;
+  }
+}
+
+export async function declineFriendRequest(requestId: number) {
+  friends.set((s) => ({ ...s, requests: s.requests.filter((r) => r.id !== requestId) }));
+  try {
+    await FriendsAPI.declineRequest(requestId);
+  } catch (e: any) {
+    await loadFriendRequests();
+    throw e;
+  }
+}
+
+export async function removeFriends(friendId: number) {
+  friends.set((s) => ({ ...s, friends: s.friends.filter((f) => f.id !== friendId) }));
+  try {
+    await FriendsAPI.removeFriend(friendId);
+  } catch (e: any) {
+    await loadFriends();
+    throw e;
+  }
+}
+// src/store/matches.ts
+import { createStore } from "./createStore";
+import { MatchesAPI } from "../api/matches";
+import type { Match } from "../api/types";
+
+export type MatchesState = {
+  byId: Record<number, Match>;
+  loading: Record<number, boolean>;
+  creating: boolean;
+  error: string | null;
+};
+
+export const matches = createStore<MatchesState>({
+  byId: {},
+  loading: {},
+  creating: false,
+  error: null,
+});
+
+export async function createMatch(opponentId: number) {
+  matches.set((s) => ({ ...s, creating: true, error: null }));
+  try {
+    const match = await MatchesAPI.create(opponentId);
+    matches.set((s) => ({ ...s, byId: { ...s.byId, [match.id]: match }, creating: false }));
+    return match;
+  } catch (e: any) {
+    matches.set((s) => ({ ...s, creating: false, error: e?.message ?? "Failed to create match" }));
+    throw e;
+  }
+}
+
+export async function loadMatch(matchId: number) {
+  matches.set((s) => ({ ...s, loading: { ...s.loading, [matchId]: true } }));
+  try {
+    const match = await MatchesAPI.get(matchId);
+    matches.set((s) => ({ ...s, byId: { ...s.byId, [matchId]: match }, loading: { ...s.loading, [matchId]: false } }));
+  } catch {
+    matches.set((s) => ({ ...s, loading: { ...s.loading, [matchId]: false } }));
+  }
+}
+
+export async function recordResult(matchId: number, scoreP1: number, scoreP2: number) {
+  const match = await MatchesAPI.recordResult(matchId, scoreP1, scoreP2);
+  matches.set((s) => ({ ...s, byId: { ...s.byId, [matchId]: match } }));
+  return match;
+}
+
+export async function cancelMatch(matchId: number) {
+  const match = await MatchesAPI.cancel(matchId);
+  matches.set((s) => ({ ...s, byId: { ...s.byId, [matchId]: match } }));
+  return match;
+}
+// src/store/tournaments.ts
+import { createStore } from "./createStore";
+import { TournamentsAPI } from "../api/tournaments";
+import type { Tournament, TournamentDetails } from "../api/types";
+
+export type TournamentsState = {
+  listing: {
+    loading: boolean;
+    items: Tournament[];
+    limit: number;
+    offset: number;
+    error: string | null;
+  };
+  byId: Record<number, TournamentDetails>;
+  loadingDetails: Record<number, boolean>;
+  creating: boolean;
+};
+
+export const tournaments = createStore<TournamentsState>({
+  listing: {
+    loading: false,
+    items: [],
+    limit: 50,
+    offset: 0,
+    error: null,
+  },
+  byId: {},
+  loadingDetails: {},
+  creating: false,
+});
+
+export async function listTournaments(limit = 50, offset = 0) {
+  tournaments.set((s) => ({
+    ...s,
+    listing: {
+      ...s.listing,
+      loading: true,
+      error: null,
+    },
+  }));
+
+  try {
+    const res = await TournamentsAPI.listTournaments(limit, offset);
+    tournaments.set((s) => ({
+      ...s,
+      listing: {
+        ...s.listing,
+        loading: false,
+        items: res.tournaments,
+        limit: res.limit,
+        offset: res.offset,
+      },
+    }));
+  } catch (e: any) {
+    tournaments.set((s) => ({
+      ...s,
+      listing: {
+        ...s.listing,
+        loading: false,
+        error: e?.message ?? "Failed to load tournaments",
+      },
+    }));
+  }
+}
+
+export async function createTournament(title: string, description: string | null, maxPlayers = 8) {
+  tournaments.set((s) => ({
+    ...s,
+    creating: true,
+  }));
+
+  try {
+    const tournament = await TournamentsAPI.createTournament(title, description, maxPlayers);
+    tournaments.set((s) => ({
+      ...s,
+      creating: false,
+      listing: {
+        ...s.listing,
+        items: [tournament, ...s.listing.items],
+      },
+    }));
+    return tournament;
+  } finally {
+    tournaments.set((s) => ({
+      ...s,
+      creating: false,
+    }));
+  }
+}
+
+export async function loadTournamentDetails(tournamentId: number) {
+  tournaments.set((s) => ({
+    ...s,
+    loadingDetails: { ...s.loadingDetails, [tournamentId]: true },
+  }));
+
+  try {
+    const details = await TournamentsAPI.getDetails(tournamentId);
+    tournaments.set((s) => ({
+      ...s,
+      byId: {
+        ...s.byId,
+        [tournamentId]: details,
+      },
+      loadingDetails: {
+        ...s.loadingDetails,
+        [tournamentId]: false,
+      },
+    }));
+  } catch {
+    tournaments.set((s) => ({
+      ...s,
+      loadingDetails: {
+        ...s.loadingDetails,
+        [tournamentId]: false,
+      },
+    }));
+  }
+}
+
+export async function joinTournament(tournamentId: number) {
+  await TournamentsAPI.joinTournament(tournamentId);
+  // Refresh details so participants list is up to date
+  await loadTournamentDetails(tournamentId);
+}
+
+export async function recordTournamentMatchResult(matchId: number, scoreP1: number, scoreP2: number) {
+  return await TournamentsAPI.recordMatchResult(matchId, scoreP1, scoreP2);
+}
+// src/store/users.ts
+import { createStore } from "./createStore";
+import { UsersAPI } from "../api/users";
+import type { Me, PublicUser } from "../api/types";
+
+export type UsersState = {
+  meUpdating: boolean;
+  search: {
+    q: string;
+    loading: boolean;
+    results: PublicUser[];
+    limit: number;
+    offset: number;
+  };
+};
+
+export const users = createStore<UsersState>({
+  meUpdating: false,
+  search: {
+    q: "",
+    loading: false,
+    results: [],
+    limit: 20,
+    offset: 0,
+  },
+});
+
+/**
+ * Update current user
+ */
+export async function updateMe(input: { pseudo?: string; avatar_url?: string | null }) {
+  users.set((s) => ({ ...s, meUpdating: true }));
+  try {
+    const me: Me = await UsersAPI.updateMe(input);
+    const { auth } = await import("./auth");
+    auth.set((s) => ({ ...s, me }));
+  } finally {
+    users.set((s) => ({ ...s, meUpdating: false }));
+  }
+}
+
+/**
+ * Uploading avatar
+ */
+export async function uploadAvatar(url: string) {
+  users.set((s) => ({ ...s, meUpdating: true }));
+  try {
+    const me: Me = await UsersAPI.uploadAvatar(url);
+    const { auth } = await import("./auth");
+    auth.set((s) => ({ ...s, me }));
+  } finally {
+    users.set((s) => ({ ...s, meUpdating: false }));
+  }
+}
+
+/**
+ * Deleting avatar
+ */
+export async function deleteAvatar() {
+  users.set((s) => ({ ...s, meUpdating: true }));
+  try {
+    const me: Me = await UsersAPI.deleteAvatar();
+    const { auth } = await import("./auth");
+    auth.set((s) => ({ ...s, me }));
+  } finally {
+    users.set((s) => ({ ...s, meUpdating: false }));
+  }
+}
+
+/**
+ * Simple search with paging
+ */
+export async function searchUsers(q: string, limit = 20, offset = 0) {
+  users.set((s) => ({ ...s, search: { ...s.search, q, loading: true, limit, offset } }));
+  try {
+    const res = await UsersAPI.searchUser(q, limit, offset);
+    users.set((s) => ({ ...s, search: { ...s.search, loading: false, results: res.users, limit: res.limit, offset: res.offset } }));
+  } catch {
+    users.set((s) => ({ ...s, search: { ...s.search, loading: false, results: [] } }));
+  }
+}
