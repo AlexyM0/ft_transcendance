@@ -1,0 +1,1 @@
+clear && (cat src/index.ts src/plugins/auth-jwt.ts src/plugins/cors.ts src/plugins/error-handler.ts src/plugins/oauth-providers.ts src/routes/* src/controllers/* src/services/* src/controllers/* > out)
