@@ -2,6 +2,7 @@
 import { domElem as h, mount } from "../ui/DomElement";
 import { createSplashScreen } from "../ui/SplashScreen";
 import { ProfileEditForm, type ProfileEditInitial, type ProfileEditPayload } from "./ProfileEditForm";
+import * as http from "../api/http";
 
 // --- Types (shape your backend to these, or tweak below) ---
 type Id = number;
@@ -25,74 +26,142 @@ type OverviewResponse = {
   latestMatch: LatestMatch; // last match detail row
 };
 
-// --- Minimal API wrappers (adapt endpoints quickly here) ---
-async function apiGet<T>(url: string): Promise<T> {
-  const res = await fetch(url, { credentials: "include" });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json();
-}
-async function apiPost<T>(url: string, body?: any): Promise<T> {
-  const res = await fetch(url, {
-    method: "POST",
-    credentials: "include",
-    headers: body ? { "Content-Type": "application/json" } : {},
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json();
-}
-async function apiPut<T>(url: string, body: any): Promise<T> {
-  const res = await fetch(url, {
-    method: "PUT",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json();
-}
-async function apiUpload<T>(url: string, file: File): Promise<T> {
-  const fd = new FormData();
-  fd.append("avatar", file);
-  const res = await fetch(url, { method: "POST", credentials: "include", body: fd });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json();
-}
-async function apiDelete<T>(url: string): Promise<T> {
-  const res = await fetch(url, { method: "DELETE", credentials: "include" });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json();
+export type MeUserRow = {
+  id: number;
+  email: string;
+  pseudo: string;
+  is_2fa_enabled: 0 | 1;
+  avatar_url: string | null;
+};
+
+type MyProfile = {
+  id: number;
+  email: string;
+  pseudo: string;
+  is2faEnabled: boolean;
+  avatarUrl: string | null;
+};
+
+type UpdatedProfile = {
+  id: number;
+  email: string;
+  pseudo: string;
+  avatar_url: string | null;
+};
+
+export type MatchRow = {
+  id: number;
+  p1_id: number;
+  p1_pseudo: string;
+  p1_avatar_url: string | null;
+  p2_id: number;
+  p2_pseudo: string;
+  p2_avatar_url: string | null;
+  status: "pending" | "finished" | "canceled";
+  winner_id: number | null;
+  score_p1: number | null;
+  score_p2: number | null;
+  created_at: string; // stored as TEXT (UTC)
+};
+
+export type UserStats = {
+  user_id: number;
+  wins: number;
+  losses: number;
+  games_played: number;
+  win_ratio: number;
+  total_score: number;
+  best_score: number;
+  updated_at: string;
+};
+
+// API calls
+function toMatchResults(viewerId: number, rows: MatchRow[]): MatchResult[] {
+  return (
+    rows
+      // only finished rows with both scores
+      .filter((m) => m.status === "finished" && m.score_p1 != null && m.score_p2 != null)
+      .map((m) => {
+        const amP1 = m.p1_id === viewerId;
+        const me = amP1 ? (m.score_p1 as number) : (m.score_p2 as number);
+        const opp = amP1 ? (m.score_p2 as number) : (m.score_p1 as number);
+        return { me: me, opp: opp };
+      })
+  );
 }
 
-// Centralized API used by this view
-const ProfileAPI = {
-  // One heavy join (user + last match + history)
-  getOverview(userId: Id | "me"): Promise<OverviewResponse> {
-    // Adjust to your backend, e.g. /api/users/:id/overview
-    const id = userId === "me" ? "me" : String(userId);
-    return apiGet(`/api/users/${id}`);
-  },
-  // A second call just for stats
-  getStats(userId: Id | "me"): Promise<Stats> {
-    const id = userId === "me" ? "me" : String(userId);
-    return apiGet(`/api/users/${id}/stats`);
-  },
-  // Edit operations for ME only
-  updateMeProfile(payload: { pseudo?: string; email?: string }): Promise<{ ok: true; user: ProfileUser }> {
-    return apiPut(`/api/users/me`, payload);
-  },
-  uploadMyAvatar(file: File): Promise<{ ok: true; avatarUrl: string }> {
-    return apiUpload(`/api/users/me/avatar`, file);
-  },
-  deleteMyAvatar(): Promise<{ ok: true }> {
-    return apiDelete(`/api/users/me/avatar`);
-  },
-  // 2FA
-  begin2fa: () => apiPost<{ otpauth: string; qrDataUrl: string }>(`/api/auth/2fa/setup`),
-  verify2faSetup: (code: string) => apiPost<{ success: true }>(`/api/auth/2fa/verify`, { code }),
-  // If you don't have this endpoint yet, add it server-side
-  disable2fa: () => apiPost<{ success: true }>(`/api/auth/2fa/disable`),
-};
+function parseUtc(s: string) {
+  // SQLite TEXT → treat as UTC for ordering
+  return Date.parse(s.replace(" ", "T") + "Z");
+}
+
+function latestFinished(rows: MatchRow[]): MatchRow | null {
+  // if your SQL already orders DESC by created_at, you can just scan from the start
+  const sorted = [...rows].sort((a, b) => parseUtc(b.created_at) - parseUtc(a.created_at));
+  return sorted.find((m) => m.status === "finished" && m.score_p1 != null && m.score_p2 != null) ?? null;
+}
+
+export function toLatestMatch(viewerId: number, rows: MatchRow[]): LatestMatch {
+  const m = latestFinished(rows);
+  if (!m) return null;
+
+  const amP1 = m.p1_id === viewerId;
+
+  const meName = amP1 ? m.p1_pseudo : m.p2_pseudo;
+  const meAvatar = (amP1 ? m.p1_avatar_url : m.p2_avatar_url) ?? DEFAULT_AVATAR;
+  const meScore = amP1 ? (m.score_p1 as number) : (m.score_p2 as number);
+
+  const oppName = amP1 ? m.p2_pseudo : m.p1_pseudo;
+  const oppAvatar = (amP1 ? m.p2_avatar_url : m.p1_avatar_url) ?? DEFAULT_AVATAR;
+  const oppScore = amP1 ? (m.score_p2 as number) : (m.score_p1 as number);
+
+  return {
+    me: { name: meName, avatar: meAvatar, score: meScore },
+    opponent: { name: oppName, avatar: oppAvatar, score: oppScore },
+  };
+}
+
+async function fetchMyProfile() {
+  const resProfile = await http.getRequest<MeUserRow>("/api/users/me");
+  const myProfileInfo: MyProfile = {
+    id: resProfile.id,
+    email: resProfile.email,
+    pseudo: resProfile.pseudo,
+    is2faEnabled: resProfile.is_2fa_enabled == 1 ? true : false,
+    avatarUrl: resProfile.avatar_url,
+  };
+  return myProfileInfo;
+}
+
+async function updateMyProfile(payload: { pseudo?: string; email?: string }) {
+  const resProfile = await http.putRequest<MeUserRow>("/api/users/me", payload);
+  const myProfileInfo: MyProfile = {
+    id: resProfile.id,
+    email: resProfile.email,
+    pseudo: resProfile.pseudo,
+    is2faEnabled: resProfile.is_2fa_enabled == 1 ? true : false,
+    avatarUrl: resProfile.avatar_url,
+  };
+  return myProfileInfo;
+}
+
+export async function FetchingData() {
+  const myProfileInfo = await fetchMyProfile();
+
+  const resMatches: { userId: number; matches: MatchRow[]; limit: number; offset: number } = await http.getRequest(`/api/users/${myProfileInfo.id}/matches`);
+  const myMatches = resMatches.matches;
+  console.log(myMatches);
+
+  const track: MatchResult[] = toMatchResults(myProfileInfo.id, myMatches);
+  console.log(track);
+
+  const latestMatch = toLatestMatch(myProfileInfo.id, myMatches);
+
+  const stats: UserStats = await http.getRequest<UserStats>(`/api/users/${myProfileInfo.id}/stats`);
+  console.log(stats);
+
+  return { myProfileInfo, myMatches, track, latestMatch, stats };
+}
 
 const DEFAULT_AVATAR = "/user.png";
 const TITLE_CLASSES = "text-teal-600 text-lg font-extrabold";
@@ -133,14 +202,18 @@ function MatchHistoryCard() {
 
 function WinrateCard() {
   const { box, slot } = Card("Winning Rate", { minH: "min-h-24" });
-  function render(s: Stats | null) {
+  function render(s: UserStats | null) {
     slot.replaceChildren();
     if (!s) {
       slot.append(h("div", { class: "text-slate-400", text: "—" }));
       return;
     }
     const wrap = h("div", { class: "flex flex-col text-center" });
-    mount(wrap, h("div", { class: "font-extrabold text-2xl text-teal-600", text: `${s.won} games won` }), h("div", { class: "text-xl text-slate-400", text: `(${Math.round(s.winrate * 100)}%)` }));
+    mount(
+      wrap,
+      h("div", { class: "font-extrabold text-2xl text-teal-600", text: `${s.stats.wins} games won` }),
+      h("div", { class: "text-xl text-slate-400", text: `(${Math.round(s.stats.win_ratio * 100)}%)` })
+    );
     slot.append(wrap);
   }
   return { el: box, update: render };
@@ -219,6 +292,23 @@ function ProfileCard() {
 
   mount(body, row("Email", emailValue), row("2FA", twofaBadge), spacer);
 
+  function update(u: MyProfile) {
+    uname.textContent = u.pseudo ?? "Pseudo";
+    emailValue.textContent = u.email ?? "email@example.com";
+    avatar.src = u.avatarUrl ?? DEFAULT_AVATAR;
+    if (u.is2faEnabled !== undefined) set2fa(u.is2faEnabled);
+    // Hide edit + 2FA badge for other users
+    // if (u.isMe !== undefined) {
+    //   if (u.isMe) {
+    //     if (!editBtn.isConnected) body.append(editBtn);
+    //     twofaBadge.parentElement!.classList.remove("hidden");
+    //   } else {
+    //     editBtn.remove();
+    //     twofaBadge.parentElement!.classList.add("hidden");
+    //   }
+    // }
+  }
+
   const splash = createSplashScreen("Edit Profile");
   document.body.appendChild(splash.backdrop);
   editBtn.addEventListener("click", () => openEdit());
@@ -240,21 +330,26 @@ function ProfileCard() {
     const form = ProfileEditForm(init, {
       async onSubmit(payload) {
         // Avatar
-        if (payload.deleteAvatar) await ProfileAPI.deleteMyAvatar();
-        if (payload.avatarFile) await ProfileAPI.uploadMyAvatar(payload.avatarFile);
+        if (payload.deleteAvatar) await http.deleteRequest("/api/users/me/avatar");
+        if (payload.avatarFile) {
+          const fd = new FormData();
+          fd.append("avatar", payload.avatarFile, payload.avatarFile.name);
+          await http.putForm("/api/users/me/avatar", fd);
+        }
 
         // Profile fields
         const fields: { pseudo?: string; email?: string } = {};
         if (payload.pseudo !== undefined) fields.pseudo = payload.pseudo;
         if (payload.email !== undefined) fields.email = payload.email;
         if (Object.keys(fields).length) {
-          const { user } = await ProfileAPI.updateMeProfile(fields);
+          const user = await updateMyProfile(payload);
           // reflect new values
           uname.textContent = user.pseudo;
           emailValue.textContent = user.email;
           avatar.src = user.avatarUrl ?? DEFAULT_AVATAR;
         }
 
+        update(await fetchMyProfile());
         splash.close();
         form.dispose();
       },
@@ -264,16 +359,16 @@ function ProfileCard() {
       },
       async on2faToggle(next) {
         if (next === "enable") {
-          const setup = await ProfileAPI.begin2fa(); // { qrDataUrl, otpauth }
+          const setup = await http.postRequest<{ otpauth: string; qrDataUrl: string }>("/api/auth/2fa/setup");
           return setup; // form will render QR + code box
         } else {
-          await ProfileAPI.disable2fa();
+          await await http.deleteRequest("/api/auth/2fa");
           set2fa(false);
           return { disabled: true as const };
         }
       },
       async on2faVerify(code) {
-        await ProfileAPI.verify2faSetup(code);
+        await http.postRequest<{ success: boolean }>("/api/auth/2fa/verify", { code });
         set2fa(true);
         return { success: true as const };
       },
@@ -283,22 +378,7 @@ function ProfileCard() {
     splash.open();
   }
 
-  function update(u: Partial<ProfileUser> & { isMe?: boolean }) {
-    if (u.pseudo !== undefined) uname.textContent = u.pseudo ?? "Pseudo";
-    if (u.email !== undefined) emailValue.textContent = u.email ?? "email@example.com";
-    if (u.avatarUrl !== undefined) avatar.src = u.avatarUrl ?? DEFAULT_AVATAR;
-    if (u.twofaEnabled !== undefined) set2fa(u.twofaEnabled);
-    // Hide edit + 2FA badge for other users
-    if (u.isMe !== undefined) {
-      if (u.isMe) {
-        if (!editBtn.isConnected) body.append(editBtn);
-        twofaBadge.parentElement!.classList.remove("hidden");
-      } else {
-        editBtn.remove();
-        twofaBadge.parentElement!.classList.add("hidden");
-      }
-    }
-  }
+  body.append(editBtn);
 
   mount(box, header, body);
   return { el: box, update };
@@ -313,7 +393,6 @@ export async function ProfileView(root: HTMLElement, userId: Id | "me" = "me") {
     stats: null as Stats | null,
   };
 
-  console.log(state);
   root.className = "grid grid-cols-8 grid-rows-5 gap-3 px-8 py-12";
 
   // Build cards
@@ -340,22 +419,13 @@ export async function ProfileView(root: HTMLElement, userId: Id | "me" = "me") {
   profileCard.update({ pseudo: "Loading…", email: "", avatarUrl: DEFAULT_AVATAR, twofaEnabled: false, isMe: state.isMe });
 
   try {
-    // Two API calls in parallel
-    const [overview, stats] = await Promise.all([ProfileAPI.getOverview(userId), ProfileAPI.getStats(userId)]);
-    state.overview = overview;
-    state.stats = stats;
-
     // Fill UI
-    profileCard.update({ ...overview.user, isMe: state.isMe });
-    matchHistory.update(overview.matchHistory);
-    latestMatch.update(overview.latestMatch);
-    winRate.update(stats);
-    tournamentsStats.update(stats);
-  } catch (err: any) {
-    // Rudimentary error slate
-    const msg = err?.message ?? "Failed to load profile";
-    profileCard.update({ pseudo: "Error", email: msg, avatarUrl: DEFAULT_AVATAR, isMe: state.isMe });
-  }
+    const data = await FetchingData();
+    profileCard.update(data.myProfileInfo);
+    matchHistory.update(data.track);
+    latestMatch.update(data.latestMatch);
+    winRate.update(data.stats);
+  } catch (err: any) {}
 
   return () => {
     // nothing to unbind (no global stores!)

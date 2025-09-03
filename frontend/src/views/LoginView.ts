@@ -97,7 +97,7 @@ const TwofaForm = () => {
   const submit = Button("Verify", { type: "submit" });
   const err = domElem("div", { class: "text-sm text-rose-600 min-h-[1.25rem]" });
 
-  const form = domElem("form", { class: "flex flex-col gap-3 hidden" });
+  const form = domElem("form", { class: "flex flex-col gap-3" });
   mount(form, codeField.labelWrapper, err, submit);
 
   form.addEventListener("submit", async (e) => {

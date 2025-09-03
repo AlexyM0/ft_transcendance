@@ -84,3 +84,7 @@ export async function searchForUser(req: FastifyRequest, rep: FastifyReply) {
   const rows = userService.searchUser(String(q), Number(limit), Number(offset));
   return rep.send({ users: rows, limit, offset });
 }
+
+export async function getAllUsers(req: FastifyRequest, rep: FastifyReply) {
+  return rep.send(userService.getAllUsers());
+}

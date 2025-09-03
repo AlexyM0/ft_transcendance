@@ -49,3 +49,8 @@ export async function cancelMatch(req: FastifyRequest, rep: FastifyReply) {
   const updated = matchesService.cancelMatch(meId, matchId);
   return rep.send(updated);
 }
+
+export async function listAllMatches(req: FastifyRequest, rep: FastifyReply) {
+  const rows = matchesService.listAllMatches();
+  return rep.send(rows);
+}

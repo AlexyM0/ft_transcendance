@@ -1,13 +1,14 @@
 // auth.controller.ts
 import type { FastifyRequest, FastifyReply } from "fastify";
 import * as authService from "../services/auth.service";
+import * as dto from "../../../shared/dto";
 import { err } from "../utils/errors";
 
 export async function register(req: FastifyRequest, rep: FastifyReply) {
   const { email, pseudo, password } = req.body as any;
   if (!email || !pseudo || !password) throw err("USER_MISSING_FIELDS");
-  const { id } = await authService.register({ email, pseudo, password });
-  return rep.code(201).send({ id });
+  await authService.register({ email, pseudo, password });
+  return rep.code(201).send();
 }
 
 export async function login(req: FastifyRequest, rep: FastifyReply) {
@@ -17,19 +18,24 @@ export async function login(req: FastifyRequest, rep: FastifyReply) {
   const user = await authService.verifyCredentials(pseudoOrEmail, password);
   if (!user) throw err("INVALID_CREDENTIALS");
 
+  let responseBody: dto.LoginResponse;
+
   if (user.is_2fa_enabled) {
     await req.server.issuePendingCookie(rep, { sub: user.id });
-    return rep.send({ require2FA: true });
+    responseBody = { require2FA: true };
+    return rep.send(responseBody);
   }
 
   await req.server.issueSessionCookie(rep, { sub: user.id, pseudo: user.pseudo, email: user.email });
-  rep.send({ success: true });
+  responseBody = { success: true };
+  rep.send(responseBody);
 }
 
 export async function logout(req: FastifyRequest, rep: FastifyReply) {
   req.server.clearPendingCookie(rep);
   req.server.clearSessionCookie(rep);
-  return rep.send({ success: true });
+  let responseBody: dto.LoginResponse = { success: true };
+  return rep.send(responseBody);
 }
 
 // OAuth
@@ -78,7 +84,8 @@ export async function setup2FA(req: FastifyRequest, rep: FastifyReply) {
   const meId = Number((req.user as any).sub);
 
   const { otpauth, qrDataUrl } = await authService.beginTwofaEnrollment(meId);
-  return rep.send({ otpauth, qrDataUrl });
+  let responseBody: dto.TwofaSetup = { otpauth: otpauth, qrDataUrl: qrDataUrl };
+  return rep.send(responseBody);
 }
 
 export async function verify2FAsetupCode(req: FastifyRequest, rep: FastifyReply) {
@@ -86,13 +93,15 @@ export async function verify2FAsetupCode(req: FastifyRequest, rep: FastifyReply)
   const { code } = (req.body as any) ?? {};
 
   await authService.completeTwofaEnrollment(meId, code);
-  return rep.send({ success: true });
+  let responseBody: dto.Success = { success: true };
+  return rep.send(responseBody);
 }
 
 export async function disable2FA(req: FastifyRequest, rep: FastifyReply) {
   const meId = Number((req.user as any).sub);
   authService.disableTwofa(meId);
-  return rep.send({ success: true });
+  let responseBody: dto.Success = { success: true };
+  return rep.send(responseBody);
 }
 
 // 2FA code at login (user pending login, current token is pending cookie)
@@ -107,5 +116,6 @@ export async function verify2FAloginCode(req: FastifyRequest, rep: FastifyReply)
   req.server.clearPendingCookie(rep);
   await req.server.issueSessionCookie(rep, { sub: userId, pseudo: user.pseudo, email: user.email });
 
-  return rep.send({ success: true });
+  let responseBody: dto.Success = { success: true };
+  return rep.send(responseBody);
 }

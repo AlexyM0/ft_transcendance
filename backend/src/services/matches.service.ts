@@ -29,20 +29,20 @@ export function recordResult(meId: number, matchId: number, scoreP1: number, sco
   const match = matchesModel.getMatch(matchId);
   if (!match) throw err("MATCH_NOT_FOUND");
 
-  if (meId !== match.player1_id && meId !== match.player2_id) throw err("FORBIDDEN");
+  if (meId !== match.p1_id && meId !== match.p2_id) throw err("FORBIDDEN");
 
   if (![scoreP1, scoreP2].every((n) => Number.isInteger(n) && n >= 0)) throw err("BAD_SCORES");
   if (scoreP1 === scoreP2) throw err("DRAW_NOT_ALLOWED");
 
-  const winnerId = scoreP1 > scoreP2 ? match.player1_id : match.player2_id;
+  const winnerId = scoreP1 > scoreP2 ? match.p1_id : match.p2_id;
 
   return withTx(() => {
     const updated = matchesModel.recordResult(matchId, winnerId, scoreP1, scoreP2);
     if (!updated) throw err("NOT_PENDING");
 
-    const loserId = winnerId === match.player1_id ? match.player2_id : match.player1_id;
-    const winnerScore = winnerId === match.player1_id ? scoreP1 : scoreP2;
-    const loserScore = winnerId === match.player1_id ? scoreP2 : scoreP1;
+    const loserId = winnerId === match.p1_id ? match.p2_id : match.p1_id;
+    const winnerScore = winnerId === match.p1_id ? scoreP1 : scoreP2;
+    const loserScore = winnerId === match.p1_id ? scoreP2 : scoreP1;
 
     userStatsModel.applyMatchResultDelta({
       winnerId,
@@ -57,9 +57,14 @@ export function recordResult(meId: number, matchId: number, scoreP1: number, sco
 export function cancelMatch(meId: number, matchId: number) {
   const match = matchesModel.getMatch(matchId);
   if (!match) throw err("MATCH_NOT_FOUND");
-  if (meId !== match.player1_id && meId !== match.player2_id) throw err("FORBIDDEN");
+  if (meId !== match.p1_id && meId !== match.p2_id) throw err("FORBIDDEN");
 
   const updated = matchesModel.cancelMatch(matchId);
   if (!updated) throw err("NOT_PENDING");
   return updated;
+}
+
+export function listAllMatches() {
+  const rows = matchesModel.listAllMatches();
+  return rows;
 }

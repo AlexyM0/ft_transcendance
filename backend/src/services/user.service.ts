@@ -46,12 +46,7 @@ export function updateMeProfile(userId: number, input: { email?: string; pseudo?
 
   try {
     const updated = usersModel.updateMeProfile(userId, { email: email as string, pseudo: pseudo as string });
-    return {
-      id: updated.id,
-      email: updated.email,
-      pseudo: updated.pseudo,
-      avatar_url: updated.avatar_url,
-    };
+    return updated;
   } catch (e: any) {
     if (String(e?.message).includes("SQLITE_CONSTRAINT")) throw err("PSEUDO_TAKEN");
     throw e;
@@ -101,8 +96,8 @@ export function searchUser(query: string, limit = 20, offset = 0) {
 }
 
 export function listUserMatches(userId: number, limit = 50, offset = 0) {
-  const row = usersModel.getPublicById(userId);
-  if (!row) throw err("USER_NOT_FOUND");
+  //   const row = usersModel.getPublicById(userId);
+  //   if (!row) throw err("USER_NOT_FOUND");
   return matchesModel.listUserMatches(userId, limit, offset);
 }
 
@@ -110,4 +105,9 @@ export function getUserStats(userId: number) {
   const row = usersStatsModel.getStats(userId);
   if (!row) throw err("USER_NOT_FOUND");
   return row;
+}
+
+export function getAllUsers() {
+  const rows = usersModel.getAllUsers();
+  return rows;
 }
