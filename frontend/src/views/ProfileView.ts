@@ -121,7 +121,7 @@ export function toLatestMatch(viewerId: number, rows: MatchRow[]): LatestMatch {
   };
 }
 
-async function fetchMyProfile() {
+export async function fetchMyProfile() {
   const resProfile = await http.getRequest<MeUserRow>("/api/users/me");
   const myProfileInfo: MyProfile = {
     id: resProfile.id,
@@ -186,7 +186,7 @@ function MatchHistoryCard() {
       return;
     }
     const row = h("div", { class: "flex flex-wrap items-center justify-center gap-4" });
-    items.forEach(({ me, opp }) => {
+    items.slice(0, 7).forEach(({ me, opp }) => {
       const win = me > opp;
       const colors = win ? "bg-emerald-600/20 border-emerald-500/40 text-emerald-600" : "bg-rose-200 border-rose-500/40 text-rose-600";
       const box = h("div", {

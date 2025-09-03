@@ -25,11 +25,9 @@ export function listForUser(userId: number, limit = 50, offset = 0) {
   return matchesModel.listUserMatches(userId, limit, offset);
 }
 
-export function recordResult(meId: number, matchId: number, scoreP1: number, scoreP2: number) {
+export function recordResult(matchId: number, scoreP1: number, scoreP2: number) {
   const match = matchesModel.getMatch(matchId);
   if (!match) throw err("MATCH_NOT_FOUND");
-
-  if (meId !== match.p1_id && meId !== match.p2_id) throw err("FORBIDDEN");
 
   if (![scoreP1, scoreP2].every((n) => Number.isInteger(n) && n >= 0)) throw err("BAD_SCORES");
   if (scoreP1 === scoreP2) throw err("DRAW_NOT_ALLOWED");

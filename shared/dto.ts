@@ -63,8 +63,8 @@ export type MatchPlayer = {
 
 export type MatchData = {
   matchId: number;
-  player1Id: MatchPlayer;
-  player2Id: MatchPlayer;
+  player1: MatchPlayer;
+  player2: MatchPlayer;
   status: "pending" | "finished" | "canceled";
   winnerId: number | null;
   scoreP1: number | null;

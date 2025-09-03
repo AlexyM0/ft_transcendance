@@ -2,22 +2,28 @@
 import type { View } from "./AppShell";
 import { domElem as h, mount } from "../ui/DomElement";
 import { Avatar } from "../ui/Avatar";
-
-/**
- * PlayView: settings panel → 2D or 3D match view
- * - Search an opponent from a dummy user list
- * - Points to win (3/5/7/9)
- * - Paddle size with preview
- * - Pick your side (left/right)
- * - Free-move paddles (all directions) toggle
- * - 2D vs 3D mode; same logic, different rendering
- *
- * Babylon is lazy-loaded ONLY if 3D is chosen (install @babylonjs/core to use it).
- */
+import * as http from "../api/http";
+import { fetchMyProfile } from "./ProfileView";
 
 /* ---------------- Dummy users (same vibe as tournaments) ---------------- */
 type Id = number;
 type User = { id: Id; alias: string; avatar: string | null };
+type UserRow = { id: number; pseudo: string; avatar_url: string | null };
+
+type MatchRow = {
+  id: number;
+  p1_id: number;
+  p1_pseudo: string;
+  p1_avatar_url: string | null;
+  p2_id: number;
+  p2_pseudo: string;
+  p2_avatar_url: string | null;
+  status: "pending" | "finished" | "canceled";
+  winner_id: number | null;
+  score_p1: number | null;
+  score_p2: number | null;
+  created_at: string;
+};
 
 const stockAvatar = "/user.png";
 function stableId(str: string) {
@@ -50,16 +56,17 @@ type GameMode = "2d" | "3d";
 type Side = "left" | "right";
 
 type Settings = {
-  me: User;
-  opponent: User | null;
+  me: UserRow;
+  opponent: UserRow | null;
   pointsToWin: Points;
   paddleSize: PaddleSizeKey;
   mySide: Side;
   freeMove: boolean;
   mode: GameMode;
+  matchId: number | null;
 };
 
-export type PlayPreset = { kind: "duel"; opponent: User; me?: User } | { kind: "tournament"; p1: User; p2: User; pointsToWin?: Points };
+export type PlayPreset = { kind: "duel"; opponent: UserRow; me?: UserRow } | { kind: "tournament"; p1: UserRow; p2: UserRow; pointsToWin?: Points };
 
 let _playPreset: PlayPreset | null = null;
 
@@ -142,6 +149,7 @@ function resolveAndReflect(
    2D Engine (canvas)
 ============================================================================ */
 class Player2D {
+  id: number;
   name: string;
   color: string;
   x: number;
@@ -160,7 +168,8 @@ class Player2D {
   left = false;
   right = false;
 
-  constructor(name: string, color: string, x: number, y: number, height: number) {
+  constructor(id: number, name: string, color: string, x: number, y: number, height: number) {
+    this.id = id;
     this.name = name;
     this.color = color;
     this.x = x;
@@ -344,12 +353,13 @@ class Game2D {
   private keyUpListener!: (e: KeyboardEvent) => void;
   private resizeObs!: ResizeObserver;
   private header: HTMLElement;
+  private matchId: number;
 
   // controls mapping
   private leftKeys = { up: "z", down: "s", left: "q", right: "d" };
   private rightKeys = { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" };
 
-  constructor(private wrap: HTMLElement, private canvas: HTMLCanvasElement, header: HTMLElement, me: User, opp: User, mySide: Side, paddleH: number, pointsToWin: number, freeMove: boolean) {
+  constructor(private wrap: HTMLElement, private canvas: HTMLCanvasElement, header: HTMLElement, me: UserRow, opp: UserRow, mySide: Side, paddleH: number, pointsToWin: number, freeMove: boolean) {
     this.header = header;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("2D context failed");
@@ -360,15 +370,18 @@ class Game2D {
     const midY = (WORLD_H - paddleH) / 2;
 
     const meLeft = mySide === "left";
-    const leftName = meLeft ? me.alias : opp.alias;
-    const rightName = meLeft ? opp.alias : me.alias;
+    const leftId = meLeft ? me.id : opp.id;
+    const rightId = meLeft ? opp.id : me.id;
+    const leftName = meLeft ? me.pseudo : opp.pseudo;
+    const rightName = meLeft ? opp.pseudo : me.pseudo;
 
-    this.pLeft = new Player2D(leftName, "#e2f7e1", margin, midY, paddleH);
-    this.pRight = new Player2D(rightName, "#fde2e2", WORLD_W - margin - paddleWidth, midY, paddleH);
+    this.pLeft = new Player2D(leftId, leftName, "#e2f7e1", margin, midY, paddleH);
+    this.pRight = new Player2D(rightId, rightName, "#fde2e2", WORLD_W - margin - paddleWidth, midY, paddleH);
     this.ball = new Ball2D(WORLD_W / 2, WORLD_H / 2, 40, "/ball.png");
 
     this.freeMove = freeMove;
     this.target = pointsToWin;
+    this.matchId = -1;
 
     this.installKeys(meLeft ? "left" : "right");
     this.installResize();
@@ -450,13 +463,17 @@ class Game2D {
     this.resizeObs?.disconnect();
   }
 
-  resetRound() {
+  async resetRound() {
+    const matchData: MatchRow = await http.postRequest<MatchRow>("/api/matches", { meId: this.pLeft.id, oppId: this.pRight.id });
+    this.matchId = matchData.id;
     this.pLeft.score = 0;
     this.pRight.score = 0;
     this.ball.reset(WORLD_W / 2, WORLD_H / 2); // was canvas.width/height
   }
 
-  start() {
+  async start() {
+    const matchData: MatchRow = await http.postRequest<MatchRow>("/api/matches", { meId: this.pLeft.id, oppId: this.pRight.id });
+    this.matchId = matchData.id;
     this.last = performance.now();
     const tick = (t: number) => {
       const dt = (t - this.last) / 1000;
@@ -468,7 +485,7 @@ class Game2D {
     requestAnimationFrame(tick);
   }
 
-  private update(dt: number) {
+  private async update(dt: number) {
     const maxStep = 1 / 240; // 240 Hz substeps
     let remaining = dt;
     while (remaining > 0) {
@@ -484,6 +501,7 @@ class Game2D {
         if (this.pLeft.score >= this.target || this.pRight.score >= this.target) {
           this.winner = this.pLeft.score > this.pRight.score ? this.pLeft : this.pRight;
           this.over = true;
+          await http.putRequest(`/api/matches/${this.matchId}/result`, { scoreP1: this.pLeft.score, scoreP2: this.pRight.score });
         }
         this.ball.reset(WORLD_W / 2, WORLD_H / 2); // CHANGED: world space
         this.paused = true;
@@ -561,15 +579,18 @@ class Game2D {
 /* =========================================================================
    Settings Panel (search opponent, knobs, preview)
 ============================================================================ */
-function SettingsPanel(prefill: Partial<Settings> | null, onStart: (s: Settings) => void) {
+async function SettingsPanel(prefill: Partial<Settings> | null, onStart: (s: Settings) => void) {
+  const myProfile = await fetchMyProfile();
+
   const state: Settings = {
-    me: { id: 1, alias: "Quentichou", avatar: stockAvatar },
+    me: { id: myProfile.id, pseudo: myProfile.pseudo, avatar_url: myProfile.avatarUrl },
     opponent: null,
     pointsToWin: 3,
     paddleSize: "medium",
     mySide: "left",
     freeMove: false,
     mode: "2d",
+    matchId: null,
   };
 
   // Apply prefill if provided
@@ -586,24 +607,31 @@ function SettingsPanel(prefill: Partial<Settings> | null, onStart: (s: Settings)
   const wrap = h("div", { class: "w-full grid md:grid-cols-2 gap-6 bg-white rounded-2xl border border-emerald-100 shadow" });
 
   // LEFT: opponent search
+  const users: UserRow[] = (await http.getRequest<UserRow[]>("/api/users/all")).filter((u) => u.id !== state.me.id);
+
   const left = h("div", { class: "flex flex-col gap-3 p-6" });
   left.append(h("div", { class: "text-lg font-semibold text-emerald-900", text: "Choose opponent" }));
   const search = h("input", {
     class: "px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-400",
     attributes: { placeholder: "Search users…", type: "search" },
   }) as HTMLInputElement;
-  const results = h("div", { class: "overflow-auto space-y-1" });
+  const results = h("div", { class: "max-h-130 overflow-auto space-y-1" });
 
-  function row(u: User) {
+  function row(u: UserRow) {
     const picked = state.opponent?.id === u.id;
     const btn = h("button", {
       class: "w-full flex items-center gap-3 px-3 py-2 rounded-xl " + (picked ? "bg-emerald-200/60" : "hover:bg-emerald-100/60"),
       attributes: { type: "button" },
     });
-    btn.append(Avatar(u.avatar, 28), h("div", { class: "font-medium text-emerald-900 truncate", text: u.alias }));
+    btn.append(Avatar(u.avatar_url ?? stockAvatar, 28), h("div", { class: "font-medium text-emerald-900 truncate", text: u.pseudo }));
     btn.addEventListener("click", () => {
       state.opponent = u;
-      renderResults();
+      renderResults(users);
+      if (state.mySide === "left") {
+        rightSidePlayer.textContent = state.opponent?.pseudo ?? "Opponent";
+      } else {
+        leftSidePlayer.textContent = state.opponent?.pseudo ?? "Opponent";
+      }
     });
     return btn;
   }
@@ -619,25 +647,25 @@ function SettingsPanel(prefill: Partial<Settings> | null, onStart: (s: Settings)
     startBtn.toggleAttribute("disabled", !ok);
   };
 
-  function renderResults() {
+  function renderResults(users: UserRow[]) {
     results.replaceChildren();
     const q = search.value.trim().toLowerCase();
 
     // Base list + ensure prefilled opponent is present at the top
-    const base: User[] = allUsers.slice();
+    const base: UserRow[] = users.slice();
     if (state.opponent && !base.some((u) => u.id === state.opponent!.id)) {
       base.unshift(state.opponent);
     }
 
-    const list = q ? base.filter((x) => x.alias.toLowerCase().includes(q)) : base.slice(0, 8);
+    const list = q ? base.filter((x) => x.pseudo.toLowerCase().includes(q) && x.id != state.me.id) : base;
     list.forEach((u) => results.append(row(u)));
 
     // Make sure the Start button reflects current state
     canStart();
   }
 
-  search.addEventListener("input", renderResults);
-  renderResults();
+  search.addEventListener("input", () => renderResults(users));
+  renderResults(users);
 
   left.append(search, results);
 
@@ -648,6 +676,7 @@ function SettingsPanel(prefill: Partial<Settings> | null, onStart: (s: Settings)
   const rightWrap = h("div", { class: "flex flex-col gap-4 items-center" });
 
   right.append(rightWrap);
+
   // Points
   const pointsWrap = h("div", { class: "flex flex-col items-center gap-4" });
   pointsWrap.append(h("div", { class: "text-sm font-semibold text-slate-600", text: "Points to win" }));
@@ -712,8 +741,8 @@ function SettingsPanel(prefill: Partial<Settings> | null, onStart: (s: Settings)
   sideWrap.append(h("div", { class: "text-sm font-semibold text-slate-600", text: "Side" }));
 
   const sides = h("div", { class: "w-full flex flex-row items-center justify-around" });
-  const leftSidePlayer = h("div", { class: "w-20 flex-none", text: state.me.alias });
-  const rightSidePlayer = h("div", { class: "w-20 flex-none", text: state.opponent?.alias ?? "Opponent" });
+  const leftSidePlayer = h("div", { class: "w-20 flex-none", text: state.me.pseudo });
+  const rightSidePlayer = h("div", { class: "w-20 flex-none", text: state.opponent?.pseudo ?? "Opponent" });
 
   const sideBtn = h("button", {
     class: "px-3 py-2 rounded-xl bg-emerald-700 text-white border border-slate-200 hover:bg-emerald-400 flex items-center gap-2",
@@ -724,12 +753,12 @@ function SettingsPanel(prefill: Partial<Settings> | null, onStart: (s: Settings)
   sideBtn.addEventListener("click", () => {
     if (state.mySide === "left") {
       state.mySide = "right";
-      leftSidePlayer.textContent = state.opponent?.alias ?? "Opponent";
-      rightSidePlayer.textContent = state.me.alias;
+      leftSidePlayer.textContent = state.opponent?.pseudo ?? "Opponent";
+      rightSidePlayer.textContent = state.me.pseudo;
     } else {
       state.mySide = "left";
-      leftSidePlayer.textContent = state.me.alias;
-      rightSidePlayer.textContent = state.opponent?.alias ?? "Opponent";
+      leftSidePlayer.textContent = state.me.pseudo;
+      rightSidePlayer.textContent = state.opponent?.pseudo ?? "Opponent";
     }
   });
   sides.append(leftSidePlayer, sideBtn, rightSidePlayer);
@@ -754,7 +783,7 @@ function SettingsPanel(prefill: Partial<Settings> | null, onStart: (s: Settings)
   // simpler: also run after every render
   const t = setInterval(canStart, 300);
 
-  startBtn.addEventListener("click", () => {
+  startBtn.addEventListener("click", async () => {
     clearInterval(t);
     observeOpponent.disconnect();
     onStart({ ...state });
@@ -771,7 +800,7 @@ function SettingsPanel(prefill: Partial<Settings> | null, onStart: (s: Settings)
 /* =========================================================================
    Header (shared for 2D/3D)
 ============================================================================ */
-function MatchHeader(me: User, opp: User, mySide: Side, getScores: () => { left: number; right: number }) {
+function MatchHeader(me: UserRow, opp: UserRow, mySide: Side, getScores: () => { left: number; right: number }) {
   const bar = h("div", { class: "h-16 px-4 border-b border-emerald-100 bg-emerald-50/70 flex items-center justify-between" });
 
   const leftBox = h("div", { class: "flex items-center gap-3" });
@@ -784,8 +813,8 @@ function MatchHeader(me: User, opp: User, mySide: Side, getScores: () => { left:
   const lScore = h("div", { class: "px-3 py-1 rounded-lg bg-white text-emerald-700 font-semibold min-w-10 text-center", text: "0" });
   const rScore = h("div", { class: "px-3 py-1 rounded-lg bg-white text-emerald-700 font-semibold min-w-10 text-center", text: "0" });
 
-  leftBox.append(Avatar(L.avatar, 32), h("div", { class: "font-semibold text-emerald-900", text: L.alias }), lScore);
-  rightBox.append(rScore, h("div", { class: "font-semibold text-emerald-900", text: R.alias }), Avatar(R.avatar, 32));
+  leftBox.append(Avatar(L.avatar_url ?? stockAvatar, 32), h("div", { class: "font-semibold text-emerald-900", text: L.pseudo }), lScore);
+  rightBox.append(rScore, h("div", { class: "font-semibold text-emerald-900", text: R.pseudo }), Avatar(R.avatar_url ?? stockAvatar, 32));
 
   bar.append(leftBox, rightBox);
 
@@ -800,7 +829,7 @@ function MatchHeader(me: User, opp: User, mySide: Side, getScores: () => { left:
 /* =========================================================================
    Match Views
 ============================================================================ */
-function GameView2D(root: HTMLElement, me: User, opp: User, settings: Settings) {
+function GameView2D(root: HTMLElement, me: UserRow, opp: UserRow, settings: Settings) {
   const wrap = h("div", { class: "flex-1 min-h-0 grid place-items-center bg-emerald-50" }); // inside AppShell padding
   const canvas = h("canvas", {
     class: "block rounded-md shadow border border-emerald-100 bg-white",
@@ -825,7 +854,7 @@ function GameView2D(root: HTMLElement, me: User, opp: User, settings: Settings) 
 /* =========================================================================
    Main exported view
 ============================================================================ */
-export const PlayView: View = (root: HTMLElement) => {
+export async function PlayView(root: HTMLElement) {
   const holder = h("div", { class: "flex flex-col gap-2" });
   root.replaceChildren(holder);
 
@@ -834,7 +863,7 @@ export const PlayView: View = (root: HTMLElement) => {
   _playPreset = null;
 
   // Me default if not provided by preset
-  const defaultMe: User = { id: 1, alias: "You", avatar: "/user.png" };
+  const defaultMe: UserRow = { id: 1, pseudo: "You", avatar_url: "/user.png" };
 
   // Build prefill for SettingsPanel depending on preset
   let prefill: Partial<Settings> | null = null;
@@ -854,7 +883,7 @@ export const PlayView: View = (root: HTMLElement) => {
   }
 
   // STEP 1: settings panel
-  const settings = SettingsPanel(prefill, (s) => {
+  const settings = await SettingsPanel(prefill, (s) => {
     // Go to game mode with the chosen players
     holder.replaceChildren();
     const me = s.me; // <-- use prefilled/custom me
@@ -878,4 +907,4 @@ export const PlayView: View = (root: HTMLElement) => {
 
   holder.append(settings.el);
   return () => {};
-};
+}

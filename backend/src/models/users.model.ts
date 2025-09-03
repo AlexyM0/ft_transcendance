@@ -16,6 +16,12 @@ export type MeUserRow = {
   avatar_url: string | null;
 };
 
+export type MatchUserRow = {
+  id: number;
+  pseudo: string;
+  avatar_url: string | null;
+};
+
 /**
  * SQL commands
  */
@@ -59,5 +65,5 @@ export function searchUsers(query: string, limit = 20, offset = 0): PublicUserRo
 }
 
 export function getAllUsers() {
-  return selectAllUsers.all();
+  return selectAllUsers.all() as MatchUserRow[];
 }
