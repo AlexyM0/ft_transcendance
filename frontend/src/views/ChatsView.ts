@@ -276,7 +276,7 @@ function MessageBubble(m: Msg, isMine: boolean) {
 }
 
 function MessageList(centerWrap: HTMLElement, friendId: number | null) {
-  const scroll = h("div", { class: "flex-1 overflow-y-auto p-4 space-y-2" });
+  const scroll = h("div", { class: "flex-1 overflow-y-scroll p-4 space-y-2" });
 
   function render() {
     scroll.replaceChildren();
@@ -296,7 +296,7 @@ function MessageList(centerWrap: HTMLElement, friendId: number | null) {
       scroll.appendChild(h("div", { class: "text-slate-400 text-center mt-20", text: "No messages yet. Say hi 👋" }));
       return;
     }
-    msgs.forEach((m) => scroll.appendChild(MessageBubble({ id: m.id, author_id: m.author_id, body: m.body, at: m.created_at?.slice(11, 16) ?? "" }, m.authorId === auth.get().meId)));
+    msgs.forEach((m) => scroll.appendChild(MessageBubble({ id: m.id, author_id: m.author_id, body: m.body, at: m.created_at?.slice(11, 16) ?? "" }, m.author_id === auth.get().meId)));
     setTimeout(() => (scroll.scrollTop = scroll.scrollHeight), 0);
   }
 
@@ -341,11 +341,11 @@ function Composer(onSend: (text: string) => void) {
 }
 
 function CenterPanel(state: { activeId: number | null }) {
-  const box = h("section", { class: "bg-white flex flex-col" });
+  const box = h("section", { class: "bg-white flex flex-col min-h-0" });
 
   const friend = () => data.friends.find((f) => f.id === state.activeId) ?? null;
   let top = TopBarCenter(friend());
-  const messageArea = h("div", { class: "flex-1 flex flex-col" });
+  const messageArea = h("div", { class: "flex-1 flex flex-col min-h-0" });
   let list = MessageList(messageArea, state.activeId);
   const composer = Composer(async (text) => {
     if (!state.activeId) return;
@@ -621,6 +621,15 @@ export function ChatsView(root: HTMLElement) {
   root.replaceChildren(wrap);
 
   const unsubscribe = subscribe(() => {
+    const s = Chats.getState();
+
+    for (const c of s.list) {
+      const body = c.last_message?.body ?? null;
+      if (!body) continue;
+
+      const f = data.friends.find((x) => x.id === c.peer.id);
+      if (f) f.last = body;
+    }
     left.render();
     center.render();
     right.render();

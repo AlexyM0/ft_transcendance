@@ -79,6 +79,7 @@ function onWs(msg: WsIncoming) {
     case "message": {
       const { chatId, message } = msg;
       if (!state.messages[chatId]) state.messages[chatId] = [];
+      if (state.messages[chatId].some((m) => m.id === message.id)) break;
       state.messages[chatId].push(message);
       const item = state.list.find((c) => c.id === chatId);
       if (item) item.last_message = message;
