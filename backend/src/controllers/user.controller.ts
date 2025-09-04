@@ -74,15 +74,19 @@ export async function getUserStats(req: FastifyRequest, rep: FastifyReply) {
 }
 
 export async function searchForUser(req: FastifyRequest, rep: FastifyReply) {
+  const meId = Number((req.user as any).sub);
+
   const q = (req.query as any) ?? {};
   const query = String(q.q ?? "").trim();
   const limit = clamp(Number(q.limit ?? 20), 1, 50);
   const offset = Math.max(0, Number(q.offset ?? 0));
   if (!Number.isInteger(limit)) throw err("BAD_LIMIT");
   if (!Number.isInteger(offset)) throw err("BAD_OFFSET");
+  if (query.length < 2) throw err("BAD_USER_QUERY");
 
-  const rows = userService.searchUser(String(q), Number(limit), Number(offset));
-  return rep.send({ users: rows, limit, offset });
+  const users = userService.searchUserWithRelation(meId, query, limit, offset);
+
+  return rep.send({ users, limit, offset });
 }
 
 export async function getAllUsers(req: FastifyRequest, rep: FastifyReply) {

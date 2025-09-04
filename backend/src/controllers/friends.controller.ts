@@ -11,9 +11,15 @@ export async function getFriendsList(req: FastifyRequest, rep: FastifyReply) {
   return rep.send({ friends });
 }
 
-export async function getPendingRequests(req: FastifyRequest, rep: FastifyReply) {
+export async function getPendingRequestsToMe(req: FastifyRequest, rep: FastifyReply) {
   const meId = Number((req.user as any).sub);
-  const friendRequests = friendsService.listPendingForMe(meId);
+  const friendRequests = friendsService.listPendingToMe(meId);
+  return rep.send({ friendRequests });
+}
+
+export async function getPendingRequestsFromMe(req: FastifyRequest, rep: FastifyReply) {
+  const meId = Number((req.user as any).sub);
+  const friendRequests = friendsService.listPendingFromMe(meId);
   return rep.send({ friendRequests });
 }
 

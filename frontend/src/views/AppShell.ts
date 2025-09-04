@@ -6,6 +6,8 @@ import { Icon } from "../ui/Icons";
 import { auth, logout } from "../store/auth.store";
 import { loadUser, usersIndex } from "../store/usersIndex.store";
 import type { PublicUser } from "../api/types";
+import { Chats } from "../helpers/chats.store";
+import { acceptFriendRequest, declineFriendRequest, searchUsers, sendFriendRequest, unfriend, type SearchHit } from "../api/friends";
 
 /**
  * A View mounts into a host and returns an unmount function
@@ -88,6 +90,18 @@ const SideBar = () => {
 /**
  * Top Bar
  */
+function debounce<F extends (...a: any[]) => void>(fn: F, ms: number) {
+  let t: number | null = null;
+  return (...args: Parameters<F>) => {
+    if (t) clearTimeout(t);
+    t = window.setTimeout(() => fn(...args), ms);
+  };
+}
+
+function rowStatus(text: string) {
+  return domElem("div", { class: "px-3 py-2 text-sm text-slate-500", text });
+}
+
 const TopBar = (me: PublicUser) => {
   const wrap = domElem("div", { class: "sticky top-3 bg-emerald-100 text-2xl font-bold text-emerald-700 z-10" });
   const row = domElem("div", { class: "h-14 px-8 flex items-center justify-between" });
@@ -100,7 +114,36 @@ const TopBar = (me: PublicUser) => {
 
   // Right: actions
   const actions = domElem("div", { class: "flex items-center gap-5 justify-between" });
-  const searchBtn = IconButton("fa-magnifying-glass", "search icon", () => (location.hash = "/friends"));
+
+  // Search controls
+  const searchHost = domElem("div", { class: "relative" });
+  const searchBtn = IconButton("fa-magnifying-glass", "Search users", openSearch);
+
+  const inputWrap = domElem("div", { class: "hidden md:w-80 w-64 relative z-10" });
+  const input = domElem("input", {
+    class: "w-full pl-3 pr-10 py-2 rounded-full border border-emerald-300 bg-white outline-none focus:ring-2 focus:ring-emerald-400 text-base",
+    attributes: {
+      type: "search",
+      placeholder: "Search users...",
+      role: "combobox",
+      "aria-expanded": "false",
+      "aria-autocomplete": "list",
+    },
+  }) as HTMLInputElement;
+
+  const loupe = domElem("i", { class: "fa-solid fa-magnifying-glass absolute right-3 top-1/2 -translate-y-1/2 text-emeral-600 pointer-events-none" });
+  const loupeWrap = domElem("div", { class: "pointer-events-none" });
+  loupeWrap.appendChild(loupe);
+
+  const dropdown = domElem("div", {
+    class: "absolute z-20 top-full left-0 mt-2 w-full rounded-xl border border-emerald-200 bg-white shadow-lg hidden",
+    attributes: { role: "listbox" },
+  });
+
+  const inputPos = domElem("div", { class: "relative" });
+  mount(inputPos, input, loupeWrap);
+  mount(inputWrap, inputPos);
+  mount(searchHost, searchBtn, inputWrap, dropdown);
 
   // Language toggle (persisted locally)
   const lang = (localStorage.getItem("lang") || "en").toLowerCase();
@@ -116,15 +159,241 @@ const TopBar = (me: PublicUser) => {
   );
 
   // User avatar (click → profile)
-  const avatarBtn = ImageButton("/user.png", "Avatar", {
+  const avatarBtn = ImageButton(me.avatar_url || "/user.png", "Avatar", {
     onClick: () => (location.hash = "/profile"),
     size: 32,
     variant: "circle",
   });
 
-  actions.append(searchBtn, langBtn, avatarBtn);
-  row.append(title, actions);
+  mount(actions, searchHost, langBtn, avatarBtn);
+  mount(row, title, actions);
   wrap.appendChild(row);
+
+  // Search behaviour
+  let open = false;
+  let inflight: AbortController | null = null;
+
+  function setSearchBtnVisible(v: boolean) {
+    const btn = (searchBtn.matches("button") ? searchBtn : searchBtn.querySelector("button")) as HTMLElement | null;
+    const target = btn ?? searchBtn;
+    target.style.display = v ? "" : "none";
+  }
+
+  function openSearch() {
+    open = true;
+    setSearchBtnVisible(false);
+    inputWrap.classList.remove("hidden");
+    input.value = "";
+    setDropdownVisible(false);
+    setTimeout(() => input.focus(), 0);
+  }
+
+  function closeSearch() {
+    open = false;
+    inputWrap.classList.add("hidden");
+    setSearchBtnVisible(true);
+
+    setDropdownVisible(false);
+    if (inflight) {
+      inflight.abort();
+      inflight = null;
+    }
+  }
+
+  function setDropdownVisible(v: boolean) {
+    dropdown.classList.toggle("hidden", !v);
+    input.setAttribute("aria-expanded", v ? "true" : "false");
+  }
+
+  const onDocClick = (e: MouseEvent) => {
+    if (!open) return;
+    if (!wrap.contains(e.target as Node)) closeSearch();
+  };
+  document.addEventListener("click", onDocClick);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeSearch();
+  });
+
+  function renderResults(items: SearchHit[]) {
+    dropdown.replaceChildren();
+    if (!items.length) {
+      dropdown.appendChild(rowStatus("No matches"));
+      return;
+    }
+
+    items.forEach((u) => {
+      const row = domElem("div", {
+        class: "px-3 py-2 flex items-center gap-3 hover:bg-emerald-50 cursor-pointer",
+        attributes: {
+          role: "option",
+        },
+      });
+
+      const avatar = domElem("img", {
+        class: "w-8 h-8 rounded-full object-cover",
+        attributes: {
+          src: u.avatar_url || "/user.png",
+          alt: `${u.pseudo}`,
+        },
+      });
+
+      const name = domElem("div", { class: "flex-1 text-sm text-slate-800 truncate", text: u.pseudo });
+
+      const actionBtn = (() => {
+        if (u.relation === "friend") {
+          const b = domElem("button", {
+            class: "px-2 py-1 rounded-md text-xs font-semibold bg-rose-600 text-white hover:bg-rose-500",
+            attributes: { type: "button" },
+            text: "Unfriend",
+          });
+          b.addEventListener("click", async (ev) => {
+            ev.stopPropagation();
+            b.setAttribute("disabled", "true");
+            try {
+              await unfriend(u.id);
+              u.relation = "none";
+              b.replaceWith(makeAddBtn(u));
+            } catch {
+              b.removeAttribute("disabled");
+            }
+          });
+          return b;
+        }
+
+        if (u.relation === "incoming_request") {
+          const b = domElem("button", {
+            class: "px-2 py-1 rounded-md text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-500",
+            attributes: { type: "button" },
+            text: "Accept",
+          });
+          b.addEventListener("click", async (ev) => {
+            ev.stopPropagation();
+            const rid = u.incoming_request_id!;
+            b.setAttribute("disabled", "true");
+            try {
+              await acceptFriendRequest(rid);
+              u.relation = "friend";
+              delete u.incoming_request_id;
+              b.replaceWith(makeUnfriendBtn(u));
+            } catch {
+              b.removeAttribute("disabled");
+            }
+          });
+          return b;
+        }
+
+        if (u.relation === "outgoing_request") {
+          const wrap = domElem("div", { class: "flex items-center gap-2" });
+          const b = domElem("button", {
+            class: "px-2 py-1 rounded-md text-xs font-semibold bg-slate-200 text-slate-700",
+            attributes: { type: "button", disabled: "true", title: "Request sent" },
+            text: "Requested",
+          });
+          const cancel = domElem("button", {
+            class: "text-[11px] text-slate-500 hover:text-slate-700 underline",
+            attributes: { type: "button", title: "Cancel request" },
+            text: "Cancel",
+          });
+          cancel.addEventListener("click", async (ev) => {
+            ev.stopPropagation();
+            const rid = u.outgoing_request_id!;
+            cancel.setAttribute("disabled", "true");
+            try {
+              await declineFriendRequest(rid);
+              u.relation = "none";
+              delete u.outgoing_request_id;
+              wrap.replaceChildren(makeAddBtn(u));
+            } catch {
+              cancel.removeAttribute("disabled");
+            }
+          });
+          mount(wrap, b, cancel);
+          return wrap;
+        }
+
+        return makeAddBtn(u);
+      })();
+
+      function makeAddBtn(user: SearchHit) {
+        const b = domElem("button", {
+          class: "px-2 py-1 rounded-md text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-500",
+          attributes: { type: "button" },
+          text: "Add friend",
+        });
+        b.addEventListener("click", async (ev) => {
+          ev.stopPropagation();
+          b.setAttribute("disabled", "true");
+          try {
+            const { id: requestId } = await sendFriendRequest(user.id);
+            user.relation = "outgoing_request";
+            user.outgoing_request_id = requestId;
+            const requested = domElem("div", { class: "px-2 py-1 rounded-md text-xs font-semibold bg-slate-200 text-slate-700", text: "Requested" });
+            b.replaceWith(requested);
+          } catch {
+            b.removeAttribute("disabled");
+          }
+        });
+        return b;
+      }
+
+      function makeUnfriendBtn(user: SearchHit) {
+        const b = domElem("button", {
+          class: "px-2 py-1 rounded-md text-xs font-semibold bg-rose-600 text-white hover:bg-rose-500",
+          attributes: { type: "button" },
+          text: "Unfriend",
+        });
+        b.addEventListener("click", async (ev) => {
+          ev.stopPropagation();
+          b.setAttribute("disabled", "true");
+          try {
+            await unfriend(user.id);
+            user.relation = "none";
+            b.replaceWith(makeAddBtn(user));
+          } catch {
+            b.removeAttribute("disabled");
+          }
+        });
+        return b;
+      }
+
+      mount(row, avatar, name, actionBtn);
+      dropdown.appendChild(row);
+
+      row.addEventListener("click", () => {
+        location.hash = `#/profile`;
+        closeSearch();
+      });
+    });
+  }
+
+  const runSearch = debounce(async () => {
+    const q = input.value.trim();
+    if (q.length < 2) {
+      setDropdownVisible(false);
+      return;
+    }
+
+    if (inflight) {
+      inflight.abort();
+      inflight = null;
+    }
+    inflight = new AbortController();
+
+    dropdown.replaceChildren(rowStatus("Searching..."));
+    setDropdownVisible(true);
+
+    try {
+      const items = await searchUsers(q, 8);
+      if (q !== input.value.trim()) return;
+      renderResults(items);
+    } catch {
+      dropdown.replaceChildren(rowStatus("Failed to search"));
+    } finally {
+      inflight = null;
+    }
+  }, 220);
+
+  input.addEventListener("input", () => runSearch());
 
   // Keep the title reactive to route changes
   const onHash = () => {
@@ -140,6 +409,7 @@ const TopBar = (me: PublicUser) => {
     avatarBtn,
     unbind() {
       window.removeEventListener("hashchange", onHash);
+      document.removeEventListener("click", onDocClick);
       unbindAvatar();
     },
   };
@@ -187,6 +457,8 @@ export function AppShell(child: View) {
     const layout = domElem("div", { class: "h-screen flex" });
     const sideBar = SideBar();
     const mainArea = MainArea(me);
+
+    Chats.init();
 
     mount(layout, sideBar.wrap, mainArea.box);
     root.appendChild(layout);

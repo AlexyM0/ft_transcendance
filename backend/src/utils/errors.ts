@@ -19,6 +19,7 @@ export const CODES = {
   BAD_LIMIT: { status: 400, message: "Invalid limit" },
   BAD_OFFSET: { status: 400, message: "Invalid offset" },
   BAD_USER_ID: { status: 400, message: "Invalid user id" },
+  BAD_USER_QUERY: { status: 400, message: "Query must be at least 2 characters" },
   INVALID_CREDENTIALS: { status: 401, message: "Invalid credentials" },
   MISSING_AVATAR_URL: { status: 400, message: "avatar_url required" },
   UNSUPPORTED_IMAGE_TYPE: { status: 400, message: "Unsupported image type" },

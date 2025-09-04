@@ -1,6 +1,5 @@
 // src/store/friends.ts
 import { createStore } from "./createStore";
-import { FriendsAPI } from "../api/friends";
 import type { PublicUser, FriendRequest } from "../api/types";
 
 export type FriendsState = {

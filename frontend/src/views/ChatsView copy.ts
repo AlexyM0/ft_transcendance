@@ -1,41 +1,79 @@
-// src/views/ChatView.ts
-
+// src/views/ChatPrototypeView.ts
 import { domElem as h, mount } from "../ui/DomElement";
 import { Avatar } from "../ui/Avatar";
 import { setPlayPreset } from "./PlayView";
-import { Chats, subscribe } from "../helpers/chats.store";
-import { auth } from "./../store/auth.store";
-import * as apiFriends from "../api/friends";
+import { Chats } from "../helpers/chats.store";
 
 /* ---------------- Types ---------------- */
 type Friend = { id: number; name: string; avatar: string | null; online: boolean; last?: string };
-type Msg = { id: number; author_id: number; body: string; at: string };
-type ReqUser = { id: number; name: string; avatar: string | null; requestId: number };
+type Msg = { id: number; authorId: number; body: string; at: string };
+type ReqUser = { id: number; name: string; avatar: string | null };
 
 /* ---------------- Dummy data ---------------- */
-const data = {
-  friends: [] as Friend[],
-  requests: {
-    received: [] as ReqUser[],
-    sent: [] as ReqUser[],
-    blocked: [] as ReqUser[],
-  },
+const me = { id: 1, name: "You", avatar: "/user.png" };
+
+const friends: Friend[] = [
+  { id: 2, name: "Ada Lovelace", avatar: "/user.png", online: true, last: "See you at 8?" },
+  { id: 3, name: "Alan Turing", avatar: "/user.png", online: false, last: "" },
+  { id: 4, name: "Grace Hopper", avatar: "/user.png", online: true, last: "Ship it." },
+];
+
+// Friend-requests store (dummy data)
+const friendReq = {
+  sent: [
+    { id: 5, name: "Katherine Johnson", avatar: "/user.png" },
+    { id: 6, name: "Linus Torvalds", avatar: "/user.png" },
+  ] as ReqUser[],
+  received: [
+    { id: 7, name: "Barbara Liskov", avatar: "/user.png" },
+    { id: 8, name: "Niklaus Wirth", avatar: "/user.png" },
+  ] as ReqUser[],
+  blocked: [{ id: 9, name: "John von Neumann", avatar: "/user.png" }] as ReqUser[],
 };
 
-const me = { id: auth.get().meId, name: "You", avatar: "/user.png" };
+const conv: Record<number, Msg[]> = {
+  2: [
+    { id: 1, authorId: 2, body: "Hey!", at: "10:02" },
+    { id: 2, authorId: 1, body: "Yo 👋", at: "10:03" },
+    { id: 3, authorId: 2, body: "See you at 8?", at: "10:04" },
+  ],
+  3: [],
+  4: [{ id: 1, authorId: 4, body: "Ship it.", at: "09:12" }],
+};
 
 /* ---------------- Small helpers ---------------- */
 function statusDot(online: boolean) {
   const c = online ? "bg-emerald-500" : "bg-slate-400";
   return h("span", { class: `inline-block w-2.5 h-2.5 rounded-full ${c}` });
 }
-
+function smallTag(text: string) {
+  return h("span", {
+    class: "px-1.5 py-0.5 text-[10px] rounded-md bg-slate-100 text-slate-600 border border-slate-200",
+    text,
+  });
+}
 function rightChevron(open: boolean) {
   return h("i", {
     class: "fa-solid fa-angle-right text-slate-500 transition-transform " + (open ? "rotate-90" : ""),
   });
 }
-
+function actionBtn(label: string, tone: "green" | "red" | "gray" | "amber", onClick: () => void) {
+  const colors =
+    tone === "green"
+      ? "bg-emerald-600 text-white hover:bg-emerald-500"
+      : tone === "red"
+      ? "bg-rose-600 text-white hover:bg-rose-500"
+      : tone === "amber"
+      ? "bg-amber-500 text-white hover:bg-amber-400"
+      : "bg-slate-200 text-slate-800 hover:bg-slate-300";
+  const b = h("button", {
+    class: `px-2.5 py-1 rounded-lg text-xs font-medium transition ${colors}`,
+    attributes: { type: "button" },
+    text: label,
+  });
+  b.addEventListener("click", onClick);
+  return b;
+}
 function removeById<T extends { id: number }>(arr: T[], id: number) {
   const i = arr.findIndex((x) => x.id === id);
   if (i >= 0) arr.splice(i, 1);
@@ -62,6 +100,18 @@ function Collapsible(title: string, startOpen = true) {
 
   mount(wrap, head, body);
   return { el: wrap, body };
+}
+
+/* ---------------- Messages subviews ---------------- */
+function MessageBubble(m: Msg, isMine: boolean) {
+  const wrap = h("div", { class: "flex " + (isMine ? "justify-end" : "justify-start") });
+  const bubble = h("div", {
+    class: "max-w-[70%] px-3 py-2 rounded-2xl shadow-sm " + (isMine ? "bg-indigo-600 text-white rounded-br-sm" : "bg-slate-100 text-slate-800 rounded-bl-sm"),
+  });
+  bubble.append(h("div", { class: "whitespace-pre-wrap break-words", text: m.body }));
+  bubble.append(h("div", { class: "text-[10px] opacity-70 mt-1 text-right", text: m.at }));
+  wrap.append(bubble);
+  return wrap;
 }
 
 /* ---------------- Left panel: Friends List (Messages tab) ---------------- */
@@ -100,7 +150,7 @@ function FriendsListPane(state: { activeId: number | null; friendQuery: string; 
   function render() {
     list.replaceChildren();
     const q = state.friendQuery.trim().toLowerCase();
-    const filtered = q ? data.friends.filter((f) => f.name.toLowerCase().includes(q)) : data.friends;
+    const filtered = q ? friends.filter((f) => f.name.toLowerCase().includes(q)) : friends;
     if (filtered.length === 0) {
       list.appendChild(h("div", { class: "text-emerald-900/60 px-2 py-2", text: "No friends match your search." }));
     } else {
@@ -151,48 +201,40 @@ function RequestsPane(state: {
 
     if (kind === "received") {
       // Accept ✅ / Decline ❌
-      const accept = iconBtn("Accept", "bg-emerald-600 hover:bg-emerald-500", async () => {
-        try {
-          await apiFriends.acceptFriendRequest(u.requestId);
-          data.friends.unshift({ id: u.id, name: u.name, avatar: u.avatar, online: false, last: "" });
-          removeById(data.requests.received, u.id);
-          state.onDataChanged();
-        } catch {}
+      const accept = iconBtn("Accept", "bg-emerald-600 hover:bg-emerald-500", () => {
+        removeById(friendReq.received, u.id);
+        friends.push({ id: u.id, name: u.name, avatar: u.avatar, online: false, last: "" });
+        if (!conv[u.id]) conv[u.id] = [];
+        state.onDataChanged();
       });
       accept.append(h("i", { class: "fa-solid fa-check text-sm" }));
 
-      const decline = iconBtn("Decline", "bg-rose-600 hover:bg-rose-500", async () => {
-        try {
-          await apiFriends.declineFriendRequest(u.requestId);
-          removeById(data.requests.received, u.id);
-          state.onDataChanged();
-        } catch {}
+      const decline = iconBtn("Decline", "bg-rose-600 hover:bg-rose-500", () => {
+        removeById(friendReq.received, u.id);
+        state.onDataChanged();
       });
       decline.append(h("i", { class: "fa-solid fa-xmark text-sm" }));
+
       actions.append(accept, decline);
     } else if (kind === "sent") {
       // Cancel (grey circle with 'x')
-      const cancel = iconBtn("Cancel request", "bg-slate-300 text-slate-800 hover:bg-slate-400", async () => {
-        try {
-          await apiFriends.declineFriendRequest(u.requestId);
-          removeById(data.requests.sent, u.id);
-          state.onDataChanged();
-        } catch {}
+      const cancel = iconBtn("Cancel request", "bg-slate-300 text-slate-800 hover:bg-slate-400", () => {
+        removeById(friendReq.sent, u.id);
+        state.onDataChanged();
       });
       cancel.append(h("i", { class: "fa-solid fa-xmark text-sm" }));
       actions.append(cancel);
     } else {
-      // Implement blocked users later
       // Unblock (amber circle with 'ban' slash)
-      //   const unblock = iconBtn("Unblock", "bg-amber-500 hover:bg-amber-400", () => {
-      //     removeById(friendReq.blocked, u.id);
-      //     state.onDataChanged();
-      //   });
-      //   unblock.append(h("i", { class: "fa-solid fa-ban text-sm" }));
-      //   actions.append(unblock);
+      const unblock = iconBtn("Unblock", "bg-amber-500 hover:bg-amber-400", () => {
+        removeById(friendReq.blocked, u.id);
+        state.onDataChanged();
+      });
+      unblock.append(h("i", { class: "fa-solid fa-ban text-sm" }));
+      actions.append(unblock);
     }
 
-    mount(row, Avatar(u.avatar || "/user.png", 40), name, actions);
+    mount(row, Avatar(u.avatar, 40), name, actions);
     return row;
   }
 
@@ -217,9 +259,9 @@ function RequestsPane(state: {
     return { el, renderRows };
   }
 
-  const secRecv = section("Received", data.requests.received, "received");
-  const secSent = section("Sent", data.requests.sent, "sent");
-  const secBlocked = section("Blocked", [], "blocked");
+  const secSent = section("Sent", friendReq.sent, "sent");
+  const secRecv = section("Received", friendReq.received, "received");
+  const secBlocked = section("Blocked", friendReq.blocked, "blocked");
 
   function render() {
     // update counts and rows
@@ -244,14 +286,6 @@ function TopBarCenter(friend: Friend | null) {
     left.append(Avatar(friend.avatar, 32));
     left.append(h("div", { class: "font-semibold text-slate-800", text: friend.name }));
     left.append(statusDot(friend.online));
-
-    const hint = h("div", { class: "text-xs text-slate-500 ml-3" });
-    const chatId = Chats.getState().activeChatId;
-    if (chatId) {
-      const typing = Chats.getTypingUsers(chatId).filter((u) => u !== auth.get().meId);
-      if (typing.length) hint.textContent = "typing...";
-    }
-    left.append(hint);
   } else {
     left.append(h("div", { class: "text-slate-400", text: "Select a friend" }));
   }
@@ -263,18 +297,6 @@ function TopBarCenter(friend: Friend | null) {
   return bar;
 }
 
-/* ---------------- Messages subviews ---------------- */
-function MessageBubble(m: Msg, isMine: boolean) {
-  const wrap = h("div", { class: "flex " + (isMine ? "justify-end" : "justify-start") });
-  const bubble = h("div", {
-    class: "max-w-[70%] px-3 py-2 rounded-2xl shadow-sm " + (isMine ? "bg-indigo-600 text-white rounded-br-sm" : "bg-slate-100 text-slate-800 rounded-bl-sm"),
-  });
-  bubble.append(h("div", { class: "whitespace-pre-wrap break-words", text: m.body }));
-  bubble.append(h("div", { class: "text-[10px] opacity-70 mt-1 text-right", text: m.at }));
-  wrap.append(bubble);
-  return wrap;
-}
-
 function MessageList(centerWrap: HTMLElement, friendId: number | null) {
   const scroll = h("div", { class: "flex-1 overflow-y-auto p-4 space-y-2" });
 
@@ -284,19 +306,12 @@ function MessageList(centerWrap: HTMLElement, friendId: number | null) {
       scroll.appendChild(h("div", { class: "text-slate-400 text-center mt-20", text: "Pick a friend on the left to start chatting." }));
       return;
     }
-
-    const chatId = Chats.getState().activeChatId;
-    if (!chatId) {
-      scroll.appendChild(h("div", { class: "text-slate-400 text-center mt-20", text: "Loading..." }));
-      return;
-    }
-
-    const msgs = Chats.getMessages(chatId);
+    const msgs = conv[friendId] ?? [];
     if (msgs.length === 0) {
       scroll.appendChild(h("div", { class: "text-slate-400 text-center mt-20", text: "No messages yet. Say hi 👋" }));
       return;
     }
-    msgs.forEach((m) => scroll.appendChild(MessageBubble({ id: m.id, author_id: m.author_id, body: m.body, at: m.created_at?.slice(11, 16) ?? "" }, m.authorId === auth.get().meId)));
+    msgs.forEach((m) => scroll.appendChild(MessageBubble(m, m.authorId === me.id)));
     setTimeout(() => (scroll.scrollTop = scroll.scrollHeight), 0);
   }
 
@@ -310,16 +325,6 @@ function Composer(onSend: (text: string) => void) {
     class: "flex-1 px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500",
     attributes: { placeholder: "Type a message…", "aria-label": "Message", autocomplete: "off" },
   }) as HTMLInputElement;
-
-  let typingTimer: number | null = null;
-  input.addEventListener("input", () => {
-    const chatId = Chats.getState().activeChatId;
-    if (!chatId) return;
-    Chats.setTyping(chatId, true);
-    if (typingTimer) clearTimeout(typingTimer);
-    typingTimer = window.setTimeout(() => Chats.setTyping(chatId, false), 1500);
-  });
-
   const send = h("button", {
     class: "w-10 h-10 grid place-items-center rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 transition",
     attributes: { type: "submit", title: "Send", "aria-label": "Send" },
@@ -332,8 +337,6 @@ function Composer(onSend: (text: string) => void) {
     if (!text) return;
     onSend(text);
     input.value = "";
-    const chatId = Chats.getState().activeChatId;
-    if (chatId) Chats.setTyping(chatId, false);
   });
 
   bar.append(input, send);
@@ -343,16 +346,15 @@ function Composer(onSend: (text: string) => void) {
 function CenterPanel(state: { activeId: number | null }) {
   const box = h("section", { class: "bg-white flex flex-col" });
 
-  const friend = () => data.friends.find((f) => f.id === state.activeId) ?? null;
+  const friend = () => friends.find((f) => f.id === state.activeId) ?? null;
   let top = TopBarCenter(friend());
   const messageArea = h("div", { class: "flex-1 flex flex-col" });
   let list = MessageList(messageArea, state.activeId);
-  const composer = Composer(async (text) => {
+  const composer = Composer((text) => {
     if (!state.activeId) return;
-    const chatId = Chats.getState().activeChatId;
-    if (!chatId) return;
-    await Chats.send(chatId, text);
-    list.render(); // the WS "message" event will also re-render via store subscribe
+    const arr = conv[state.activeId] || (conv[state.activeId] = []);
+    arr.push({ id: Date.now(), authorId: me.id, body: text, at: new Date().toLocaleTimeString().slice(0, 5) });
+    list.render();
   });
 
   mount(box, top, messageArea, composer);
@@ -382,16 +384,16 @@ function RightPanel(state: { activeId: number | null; forceRenderAll: () => void
 
   // Small helper: block current active friend
   function blockActive() {
-    const f = data.friends.find((x) => x.id === state.activeId);
+    const f = friends.find((x) => x.id === state.activeId);
     if (!f) return;
 
     // Remove from friends
-    removeById(data.friends as Array<{ id: number }>, f.id);
+    removeById(friends as Array<{ id: number }>, f.id);
 
     // Add to blocked if not already there
-    // if (!friendReq.blocked.some((u) => u.id === f.id)) {
-    //   friendReq.blocked.push({ id: f.id, name: f.name, avatar: f.avatar });
-    // }
+    if (!friendReq.blocked.some((u) => u.id === f.id)) {
+      friendReq.blocked.push({ id: f.id, name: f.name, avatar: f.avatar });
+    }
 
     // Clear selection and refresh UI
     state.activeId = null;
@@ -399,19 +401,16 @@ function RightPanel(state: { activeId: number | null; forceRenderAll: () => void
   }
 
   // Small helper: unfriend current active friend
-  async function unfriendActive() {
-    const f = data.friends.find((x) => x.id === state.activeId);
+  function unfriendActive() {
+    const f = friends.find((x) => x.id === state.activeId);
     if (!f) return;
 
-    try {
-      // Remove from friends
-      await apiFriends.unfriend(f.id);
-      removeById(data.friends as Array<{ id: number }>, f.id);
+    // Remove from friends
+    removeById(friends as Array<{ id: number }>, f.id);
 
-      // Clear selection and refresh UI
-      state.activeId = null;
-      state.forceRenderAll();
-    } catch {}
+    // Clear selection and refresh UI
+    state.activeId = null;
+    state.forceRenderAll();
   }
 
   function action(label: string, icon: string, tone: "green" | "red", onClick: () => void) {
@@ -430,14 +429,14 @@ function RightPanel(state: { activeId: number | null; forceRenderAll: () => void
   const actionsCol = h("div", { class: "mt-auto flex flex-col gap-2" });
   actionsCol.append(
     action("Invite to match", "fa-table-tennis-paddle-ball", "green", () => {
-      const f = data.friends.find((x) => x.id === state.activeId);
+      const f = friends.find((x) => x.id === state.activeId);
       if (!f) return;
 
       // Map Chat friend -> Play User
       const opp = { id: f.id, alias: f.name, avatar: f.avatar };
       const meUser = { id: 1, alias: me.name, avatar: me.avatar }; // reuse your chat `me`
 
-      setPlayPreset({ kind: "duel", me: { id: meUser.id, pseudo: meUser.alias, avatar_url: meUser.avatar }, opponent: { id: opp.id, pseudo: opp.alias, avatar_url: opp.avatar } });
+      setPlayPreset({ kind: "duel", me: meUser, opponent: opp });
 
       // Navigate to your Play route (adapt one of the lines below to your router)
       // router.go("play");
@@ -446,17 +445,15 @@ function RightPanel(state: { activeId: number | null; forceRenderAll: () => void
     }),
 
     action("Show profile", "fa-id-card", "green", () => {
-      const f = data.friends.find((x) => x.id === state.activeId);
-      if (f) window.location.hash = `#/profile`;
+      /* hook up later */
     }),
-
     action("Unfriend", "fa-user-minus", "red", unfriendActive),
     action("Block user", "fa-ban", "red", blockActive)
   );
 
   function render() {
     box.replaceChildren();
-    const f = data.friends.find((x) => x.id === state.activeId) ?? null;
+    const f = friends.find((x) => x.id === state.activeId) ?? null;
     const header = h("div", { class: "flex items-center gap-3" });
     const spacer = h("div", { class: "mt-2" });
 
@@ -496,7 +493,43 @@ function LeftPanel(state: {
     return btn;
   }
   const tabs = h("div", { class: "px-2 pt-1 flex gap-2" });
+
+  // Content container
   const content = h("div", { class: "flex-1 min-h-0" });
+
+  // Pinned counts
+  function sublabel() {
+    const pending = friendReq.received.length;
+    return pending > 0 ? h("span", { class: "ml-1 text-xs text-emerald-700", text: `(${pending} pending)` }) : h("span");
+  }
+
+  // Subviews
+  let friendsPane = FriendsListPane({
+    activeId: state.activeId,
+    friendQuery: state.friendQuery,
+    setActive: (id) => {
+      state.setActive(id);
+      render(); // refresh tab header highlights etc.
+    },
+    setFriendQuery: (q) => {
+      state.setFriendQuery(q);
+      friendsPane.render();
+    },
+  });
+
+  let requestsPane = RequestsPane({
+    requestQuery: state.requestQuery,
+    setRequestQuery: (q) => {
+      state.setRequestQuery(q);
+      requestsPane.render();
+    },
+    onDataChanged: () => {
+      // re-render both panes so counts / friends update
+      friendsPane.render();
+      requestsPane.render();
+      state.forceRenderAll();
+    },
+  });
 
   function renderTabs() {
     tabs.replaceChildren();
@@ -512,11 +545,10 @@ function LeftPanel(state: {
       render();
     });
 
-    const pending = data.requests.received.length;
-    if (pending > 0) {
+    if (friendReq.received.length > 0) {
       const badge = h("span", {
         class: "ml-2 inline-flex items-center justify-center min-w-[18px] h-5 px-1 rounded-full text-[10px] " + "bg-rose-600 text-white",
-        text: String(pending),
+        text: String(friendReq.received.length),
       });
       reqBtn.appendChild(badge);
     }
@@ -528,7 +560,7 @@ function LeftPanel(state: {
     renderTabs();
     content.replaceChildren();
     if (state.leftTab === "messages") {
-      const friendsPane = FriendsListPane({
+      friendsPane = FriendsListPane({
         activeId: state.activeId,
         friendQuery: state.friendQuery,
         setActive: (id) => {
@@ -543,20 +575,21 @@ function LeftPanel(state: {
       mount(content, friendsPane.el);
       friendsPane.render();
     } else {
-      const requestsPane = RequestsPane({
+      requestsPane = RequestsPane({
         requestQuery: state.requestQuery,
         setRequestQuery: (q) => {
           state.setRequestQuery(q);
+          requestsPane.render();
         },
         onDataChanged: () => {
-          render();
+          friendsPane.render();
+          requestsPane.render();
           state.forceRenderAll();
         },
       });
-
       // Header line for clarity
       const header = h("div", { class: "px-2 pt-1 text-emerald-900 font-semibold flex items-center" });
-      mount(header, h("span", { text: "Friend Requests" }));
+      mount(header, h("span", { text: "Friend Requests" }), sublabel());
       mount(content, header, requestsPane.el);
       requestsPane.render();
     }
@@ -581,17 +614,10 @@ export function ChatsView(root: HTMLElement) {
     friendQuery: "",
     requestQuery: "",
     setActive(id: number) {
-      (async () => {
-        const chatId = await Chats.ensureChatWith(id);
-        await Chats.loadMessages(chatId);
-        Chats.setActiveChat(chatId);
-        console.log(Chats.getState());
-
-        this.activeId = id;
-        left.render();
-        center.render();
-        right.render();
-      })().catch(console.error);
+      this.activeId = id;
+      left.render();
+      center.render();
+      right.render();
     },
     setLeftTab(t: "messages" | "requests") {
       this.leftTab = t;
@@ -619,46 +645,5 @@ export function ChatsView(root: HTMLElement) {
 
   mount(wrap, left.el, center.el, right.el);
   root.replaceChildren(wrap);
-
-  const unsubscribe = subscribe(() => {
-    left.render();
-    center.render();
-    right.render();
-  });
-
-  (async () => {
-    const friendRows = await apiFriends.getFriends();
-    data.friends = friendRows.map((u) => ({
-      id: u.id,
-      name: u.pseudo,
-      avatar: u.avatar_url ?? "/user.png",
-      online: false,
-      last: "",
-    }));
-
-    // Request RECEIVED -> show sender profiles
-    const rec = await apiFriends.getRequestsReceived();
-    data.requests.received = await Promise.all(
-      rec.map(async (r) => {
-        const sender = await apiFriends.getPublicUser(r.from_user_id);
-        return { id: sender.id, name: sender.pseudo, avatar: sender.avatar_url, requestId: r.id };
-      })
-    );
-
-    // Requests SENT -> show recipient profiles
-    const sent = await apiFriends.getRequestsSent();
-    data.requests.sent = await Promise.all(
-      sent.map(async (r) => {
-        const to = await apiFriends.getPublicUser(r.to_user_id);
-        return { id: to.id, name: to.pseudo, avatar: to.avatar_url, requestId: r.id };
-      })
-    );
-
-    left.render();
-  })().catch(console.error);
-
-  return () => {
-    unsubscribe();
-    Chats.setActiveChat(null);
-  };
+  return () => {};
 }

@@ -4,9 +4,19 @@ import * as usersModel from "../models/users.model";
 import { db } from "../utils/db";
 import { err } from "../utils/errors";
 
+export type Relation = "friend" | "outgoing_request" | "incoming_request" | "none";
+
 function ensureUserExists(userId: number) {
   const user = usersModel.getPublicById(userId);
   if (!user) throw err("USER_NOT_FOUND");
+}
+
+export function relationBetween(meId: number, otherId: number): Relation {
+  if (meId === otherId) return "none";
+  if (friendsModel.areFriends(meId, otherId)) return "friend";
+  if (friendsModel.getPending(meId, otherId)) return "outgoing_request";
+  if (friendsModel.getPending(otherId, meId)) return "incoming_request";
+  return "none";
 }
 
 export function listFriends(meId: number) {
@@ -14,8 +24,12 @@ export function listFriends(meId: number) {
   return rows.map((r) => usersModel.getPublicById(r.friend_id)).filter(Boolean);
 }
 
-export function listPendingForMe(meId: number) {
-  return friendsModel.listPendingForMe(meId);
+export function listPendingToMe(meId: number) {
+  return friendsModel.listPendingToMe(meId);
+}
+
+export function listPendingFromMe(meId: number) {
+  return friendsModel.listPendingFromMe(meId);
 }
 
 export function sendFriendRequest(meId: number, toUserId: number) {

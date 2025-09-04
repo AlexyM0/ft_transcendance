@@ -2,6 +2,8 @@
 import * as usersModel from "../models/users.model";
 import * as usersStatsModel from "../models/user_stats.model";
 import * as matchesModel from "../models/matches.model";
+import * as friendsModel from "../models/friends.model";
+import { relationBetween, type Relation } from "./friends.service";
 import { err } from "../utils/errors";
 import { MultipartFile } from "@fastify/multipart";
 import path from "path";
@@ -21,6 +23,16 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/png": "png",
   "image/webp": "webp",
   "image/gif": "gif",
+};
+
+export type SearchUserResult = {
+  id: number;
+  email: string;
+  pseudo: string;
+  avatar_url: string | null;
+  relation: Relation;
+  incoming_request_id?: number;
+  outgoing_request_id?: number;
 };
 
 export function getMe(userId: number): usersModel.MeUserRow | undefined {
@@ -93,6 +105,33 @@ export function searchUser(query: string, limit = 20, offset = 0) {
   const q = query.trim();
   if (q.length === 0) return [];
   return usersModel.searchUsers(query, limit, offset);
+}
+
+export function searchUserWithRelation(meId: number, query: string, limit = 20, offset = 0): SearchUserResult[] {
+  const q = String(query ?? "").trim();
+  if (q.length === 0) return [];
+
+  const rows = usersModel.searchUsers(q, limit, offset);
+  const filtered = rows.filter((u) => u.id !== meId);
+
+  return filtered.map((u) => {
+    const rel = relationBetween(meId, u.id);
+    const result: SearchUserResult = {
+      id: u.id,
+      email: u.email,
+      pseudo: u.pseudo,
+      avatar_url: u.avatar_url ?? null,
+      relation: rel,
+    };
+    if (rel == "incoming_request") {
+      const rid = friendsModel.getPendingId(u.id, meId);
+      if (rid) result.incoming_request_id = rid;
+    } else if (rel == "outgoing_request") {
+      const rid = friendsModel.getPendingId(meId, u.id);
+      if (rid) result.outgoing_request_id = rid;
+    }
+    return result;
+  });
 }
 
 export function listUserMatches(userId: number, limit = 50, offset = 0) {

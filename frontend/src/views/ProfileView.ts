@@ -150,15 +150,15 @@ export async function FetchingData() {
 
   const resMatches: { userId: number; matches: MatchRow[]; limit: number; offset: number } = await http.getRequest(`/api/users/${myProfileInfo.id}/matches`);
   const myMatches = resMatches.matches;
-  console.log(myMatches);
+  //   console.log(myMatches);
 
   const track: MatchResult[] = toMatchResults(myProfileInfo.id, myMatches);
-  console.log(track);
+  //   console.log(track);
 
   const latestMatch = toLatestMatch(myProfileInfo.id, myMatches);
 
   const stats: UserStats = await http.getRequest<UserStats>(`/api/users/${myProfileInfo.id}/stats`);
-  console.log(stats);
+  //   console.log(stats);
 
   return { myProfileInfo, myMatches, track, latestMatch, stats };
 }
