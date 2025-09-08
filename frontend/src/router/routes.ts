@@ -1,12 +1,15 @@
 // src/router/routes.ts
+import { auth } from "../store/auth.store";
 import type { View } from "../views/AppShell";
 import { LoginView } from "../views/LoginView";
 import { AppShell } from "../views/AppShell";
 import { ProfileView } from "../views/ProfileView";
+import { PlayChooserView } from "../views/PlayChooserView";
+import { PlayLocalView } from "../views/PlayLocalView";
+import { PlayOnlineView } from "../views/PlayOnlineView";
 import { ChatsView } from "../views/ChatsView";
 import { TournamentsView } from "../views/TournamentsView";
-import { auth } from "../store/auth.store";
-import { PlayView } from "../views/PlayView";
+import { MatchLocalView } from "../views/MatchLocalView";
 
 export type Route = {
   path: string;
@@ -16,8 +19,15 @@ export type Route = {
 
 export const Routes: Route[] = [
   { path: "/login", view: LoginView, auth: false },
-  { path: "/play", view: AppShell(PlayView), auth: true },
+  //   { path: "/play", view: AppShell(PlayView), auth: true },
+
+  { path: "/play", view: AppShell(PlayChooserView), auth: true },
+  { path: "/play/local", view: AppShell(PlayLocalView), auth: true },
+  { path: "/play/local/m", view: AppShell(MatchLocalView), auth: true },
+  { path: "/play/online", view: AppShell(PlayOnlineView), auth: true },
+
   { path: "/profile", view: AppShell(ProfileView), auth: true },
+  { path: "/users/:pseudo", view: AppShell(ProfileView), auth: true },
   { path: "/chats", view: AppShell(ChatsView), auth: true },
   { path: "/tournaments", view: AppShell(TournamentsView), auth: true },
 ];

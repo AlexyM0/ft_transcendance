@@ -34,6 +34,8 @@ const issueSessionCookie = async function (rep: FastifyReply, payload: Record<st
     httpOnly: true,
     secure: isProd || CROSS_SITE_COOKIES,
     sameSite: CROSS_SITE_COOKIES ? ("none" as const) : ("strict" as const),
+    // sameSite: "lax",
+    // secure: false,
     path: "/",
     maxAge: 60 * 60,
   });
@@ -48,6 +50,8 @@ const issuePendingCookie = async function (rep: FastifyReply, payload: Record<st
     httpOnly: true,
     secure: isProd || CROSS_SITE_COOKIES,
     sameSite: CROSS_SITE_COOKIES ? ("none" as const) : ("strict" as const),
+    // sameSite: "lax",
+    // secure: false,
     path: "/",
     maxAge: 5 * 60,
   });

@@ -33,7 +33,7 @@ export class RateLimiter {
     const now = Date.now();
     let bucket = this.buckets.get(ws);
 
-    // First event or window exprired -> reset bucket
+    // First event or window expired -> reset bucket
     if (!bucket || now >= bucket.resetAt) {
       bucket = { count: 0, resetAt: now + this.windowMs };
       this.buckets.set(ws, bucket);

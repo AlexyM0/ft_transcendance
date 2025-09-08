@@ -13,7 +13,7 @@
  * In prod, set VITE_API_BASE to the domain
  */
 // export const API_BASE = (import.meta as any)?.env?.VITE_API_BASE ?? "";
-export const API_BASE = "http://localhost:5000";
+export const API_BASE = import.meta.env.VITE_API_URL;
 
 export class HttpError extends Error {
   constructor(public status: number, message: string, public body?: unknown) {
@@ -38,7 +38,9 @@ export function queryString(params?: Record<string, any>): string {
  * Low-level abstracted function. Called by Http Methods helpers below
  */
 export async function http<T = unknown>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(API_BASE + path, {
+  const url = new URL(path, API_BASE);
+
+  const res = await fetch(url.toString(), {
     // Cookie-based session from backend
     credentials: "include",
     // Default headers, potentially overriden

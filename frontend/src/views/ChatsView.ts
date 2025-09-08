@@ -12,7 +12,6 @@ type Friend = { id: number; name: string; avatar: string | null; online: boolean
 type Msg = { id: number; author_id: number; body: string; at: string };
 type ReqUser = { id: number; name: string; avatar: string | null; requestId: number };
 
-/* ---------------- Dummy data ---------------- */
 const data = {
   friends: [] as Friend[],
   requests: {
@@ -79,32 +78,50 @@ function FriendsListPane(state: { activeId: number | null; friendQuery: string; 
 
   function friendRow(f: Friend, active: boolean) {
     const row = h("button", {
-      class: "w-full text-left px-3 py-2 rounded-xl transition grid grid-cols-[40px_1fr] gap-3 " + (active ? "bg-emerald-200/50" : "hover:bg-emerald-100/60"),
+      class: "w-full text-left px-3 py-2 rounded-xl transition grid grid-cols-[40px_1fr_auto] gap-3 " + (active ? "bg-emerald-200/50" : "hover:bg-emerald-100/60"),
       attributes: { type: "button" },
     });
     const avatar = Avatar(f.avatar, 40);
     const name = h("div", { class: "font-medium text-emerald-900 truncate", text: f.name });
     const preview = h("div", {
-      class: "text-sm text-emerald-700/80 truncate",
+      class: "text-sm text-emerald-700/80 truncate max-w-[220px]",
       text: f.last?.trim() ? f.last! : "Say hi to…",
     });
+
+    const onlineNow = Chats.getOnline(f.id);
     const meta = h("div", { class: "flex items-center gap-2" });
-    mount(meta, statusDot(f.online), h("span", { class: "text-xs text-emerald-800/70", text: f.online ? "online" : "offline" }));
+    mount(meta, statusDot(onlineNow), h("span", { class: "text-xs text-emerald-800/70", text: onlineNow ? "online" : "offline" }));
     const right = h("div", {});
     mount(right, name, preview, meta);
-    mount(row, avatar, right);
+
+    const chatId = Chats.getChatIdByPeer(f.id);
+    const unread = chatId ? Chats.getUnread(chatId) : 0;
+    const unreadDot = unread > 0 ? h("span", { class: "ml-2 inline-block w-2 h-2 rounded-full bg-rose-600 self-center" }) : h("span");
+
+    mount(row, avatar, right, unreadDot);
     row.addEventListener("click", () => state.setActive(f.id));
     return row;
   }
 
   function render() {
     list.replaceChildren();
+
+    const order = new Map<number, number>(); // userId -> rank
+    Chats.getSortedList().forEach((c, i) => {
+      if (c.peer) order.set(c.peer.id, i);
+    });
+
     const q = state.friendQuery.trim().toLowerCase();
-    const filtered = q ? data.friends.filter((f) => f.name.toLowerCase().includes(q)) : data.friends;
-    if (filtered.length === 0) {
+    let friendsArr = q ? data.friends.filter((f) => f.name.toLowerCase().includes(q)) : [...data.friends];
+    friendsArr.sort((a, b) => {
+      const ra = order.has(a.id) ? order.get(a.id)! : Number.POSITIVE_INFINITY;
+      const rb = order.has(b.id) ? order.get(b.id)! : Number.POSITIVE_INFINITY;
+      return ra - rb;
+    });
+    if (friendsArr.length === 0) {
       list.appendChild(h("div", { class: "text-emerald-900/60 px-2 py-2", text: "No friends match your search." }));
     } else {
-      filtered.forEach((f) => list.appendChild(friendRow(f, state.activeId === f.id)));
+      friendsArr.forEach((f) => list.appendChild(friendRow(f, state.activeId === f.id)));
     }
   }
 
@@ -243,7 +260,9 @@ function TopBarCenter(friend: Friend | null) {
   if (friend) {
     left.append(Avatar(friend.avatar, 32));
     left.append(h("div", { class: "font-semibold text-slate-800", text: friend.name }));
-    left.append(statusDot(friend.online));
+
+    const onlineNow = Chats.getOnline(friend.id);
+    left.append(statusDot(onlineNow));
 
     const hint = h("div", { class: "text-xs text-slate-500 ml-3" });
     const chatId = Chats.getState().activeChatId;
@@ -267,7 +286,7 @@ function TopBarCenter(friend: Friend | null) {
 function MessageBubble(m: Msg, isMine: boolean) {
   const wrap = h("div", { class: "flex " + (isMine ? "justify-end" : "justify-start") });
   const bubble = h("div", {
-    class: "max-w-[70%] px-3 py-2 rounded-2xl shadow-sm " + (isMine ? "bg-indigo-600 text-white rounded-br-sm" : "bg-slate-100 text-slate-800 rounded-bl-sm"),
+    class: "max-w-[70%] px-3 py-2 rounded-2xl shadow-sm " + (isMine ? "bg-emerald-600 text-white rounded-br-sm" : "bg-slate-100 text-slate-800 rounded-bl-sm"),
   });
   bubble.append(h("div", { class: "whitespace-pre-wrap break-words", text: m.body }));
   bubble.append(h("div", { class: "text-[10px] opacity-70 mt-1 text-right", text: m.at }));
@@ -321,7 +340,7 @@ function Composer(onSend: (text: string) => void) {
   });
 
   const send = h("button", {
-    class: "w-10 h-10 grid place-items-center rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 transition",
+    class: "w-10 h-10 grid place-items-center rounded-xl bg-emerald-600 text-white hover:bg-indigo-500 transition",
     attributes: { type: "submit", title: "Send", "aria-label": "Send" },
   });
   send.append(h("i", { class: "fa-solid fa-paper-plane" }));
@@ -447,7 +466,7 @@ function RightPanel(state: { activeId: number | null; forceRenderAll: () => void
 
     action("Show profile", "fa-id-card", "green", () => {
       const f = data.friends.find((x) => x.id === state.activeId);
-      if (f) window.location.hash = `#/profile`;
+      if (f) window.location.hash = `#/users/${encodeURIComponent(f.name)}`;
     }),
 
     action("Unfriend", "fa-user-minus", "red", unfriendActive),
@@ -585,7 +604,6 @@ export function ChatsView(root: HTMLElement) {
         const chatId = await Chats.ensureChatWith(id);
         await Chats.loadMessages(chatId);
         Chats.setActiveChat(chatId);
-        console.log(Chats.getState());
 
         this.activeId = id;
         left.render();
@@ -620,15 +638,37 @@ export function ChatsView(root: HTMLElement) {
   mount(wrap, left.el, center.el, right.el);
   root.replaceChildren(wrap);
 
-  const unsubscribe = subscribe(() => {
+  const unsubscribe = subscribe(async () => {
     const s = Chats.getState();
 
+    // Update left-panel message previews from store list
     for (const c of s.list) {
       const body = c.last_message?.body ?? null;
-      if (!body) continue;
+      if (!body || !c.peer) continue;
 
       const f = data.friends.find((x) => x.id === c.peer.id);
       if (f) f.last = body;
+    }
+
+    /**
+     *  Friend-request live badge: if store counter increased, fetch the last request's sender
+     *	We can check  'getFriendRequestsCount()' vs our local length
+     */
+    const count = Chats.getFriendRequestsCount();
+    if (count > data.requests.received.length) {
+      try {
+        const rec = await apiFriends.getRequestsReceived();
+        // merge only new ones
+        const existing = new Set(data.requests.received.map((r) => r.requestId));
+        const newOnes = rec.filter((r) => !existing.has(r.id));
+        const add = await Promise.all(
+          newOnes.map(async (r) => {
+            const sender = await apiFriends.getPublicUser(r.from_user_id);
+            return { id: sender.id, name: sender.pseudo, avatar: sender.avatar_url, requestId: r.id };
+          })
+        );
+        data.requests.received.unshift(...add);
+      } catch {}
     }
     left.render();
     center.render();

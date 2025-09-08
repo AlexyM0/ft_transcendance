@@ -661,28 +661,6 @@ export class Game2D {
   }
 }
 
-/**
- * Opening chooser
- */
-function OpeningChooser(onPick: (kind: "local" | "online") => void) {
-  const wrap = h("div", { class: "grid md:grid-cols-2 gap-6" });
-
-  const local = h("button", { class: "p-6 rounded-2xl border bg-white hover:bg-emerald-50 text-left" });
-  const localText = h("div", { class: "text-xl font-semibold text-emerald-900", text: "Local Game" });
-  const localSubtext = h("div", { class: "text-sm text-slate-600", text: "Same-device duel" });
-  mount(local, localText, localSubtext);
-  local.addEventListener("click", () => onPick("local"));
-
-  const online = h("button", { class: "p-6 rounded-2xl border bg-white hover:bg-teal-50 text-left" });
-  const onlineText = h("div", { class: "text-xl font-semibold text-teal-900", text: "Online Game" });
-  const onlineSubtext = h("div", { class: "text-sm text-slate-600", text: "Remote-device duel" });
-  mount(online, onlineText, onlineSubtext);
-  online.addEventListener("click", () => onPick("online"));
-
-  wrap.append(local, online);
-  return wrap;
-}
-
 /* =========================================================================
    Settings Panel (search opponent, knobs, preview)
 ============================================================================ */

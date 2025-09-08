@@ -7,8 +7,10 @@ function isParticipant(meId: number, chat: chatModel.ChatRow) {
   return meId === chat.user_a_id || meId === chat.user_b_id;
 }
 
-function ensureUserExists(id: number) {
-  if (!usersModel.getPublicById(id)) throw err("USER_NOT_FOUND");
+export function ensureUserExists(id: number) {
+  const user = usersModel.getPublicById(id);
+  if (!user) throw err("USER_NOT_FOUND");
+  return user;
 }
 
 export function listMyChats(meId: number, limit = 50, offset = 0) {

@@ -1,30 +1,18 @@
 // src/views/ProfileView.ts
 import { domElem as h, mount } from "../ui/DomElement";
 import { createSplashScreen } from "../ui/SplashScreen";
-import { ProfileEditForm, type ProfileEditInitial, type ProfileEditPayload } from "./ProfileEditForm";
+import { ProfileEditForm, type ProfileEditInitial } from "./ProfileEditForm";
 import * as http from "../api/http";
 
-// --- Types (shape your backend to these, or tweak below) ---
-type Id = number;
-type ProfileUser = {
-  id: Id;
-  pseudo: string;
-  email: string;
-  avatarUrl: string | null;
-  twofaEnabled: boolean;
-};
+// --- Types  ---
 type MatchResult = { me: number; opp: number };
+
 type LatestMatch = {
   me: { name: string; avatar: string; score: number };
   opponent: { name: string; avatar: string; score: number };
 } | null;
-type Stats = { won: number; winrate: number; tournaments: { win: number; loss: number } };
 
-type OverviewResponse = {
-  user: ProfileUser;
-  matchHistory: MatchResult[]; // recent matches for the squares
-  latestMatch: LatestMatch; // last match detail row
-};
+type Stats = { won: number; winrate: number; tournaments: { win: number; loss: number } };
 
 export type MeUserRow = {
   id: number;
@@ -34,19 +22,19 @@ export type MeUserRow = {
   avatar_url: string | null;
 };
 
+export type PublicUserRow = {
+  id: number;
+  email: string;
+  pseudo: string;
+  avatar_url: string | null;
+};
+
 type MyProfile = {
   id: number;
   email: string;
   pseudo: string;
   is2faEnabled: boolean;
   avatarUrl: string | null;
-};
-
-type UpdatedProfile = {
-  id: number;
-  email: string;
-  pseudo: string;
-  avatar_url: string | null;
 };
 
 export type MatchRow = {
@@ -161,6 +149,32 @@ export async function FetchingData() {
   //   console.log(stats);
 
   return { myProfileInfo, myMatches, track, latestMatch, stats };
+}
+
+async function fetchPublicUserByPseudo(pseudo: string): Promise<PublicUserRow | null> {
+  const res = await http.getRequest<{ users: PublicUserRow[]; limit: number; offset: number }>(`/api/users/search?q=${encodeURIComponent(pseudo)}`);
+  const users = res.users;
+  return users ? users[0] : null;
+}
+
+async function fetchPublicOverview(userId: number) {
+  const user = await http.getRequest<PublicUserRow>(`/api/users/${userId}`);
+  const resMatches: { userId: number; matches: MatchRow[]; limit: number; offset: number } = await http.getRequest(`/api/users/${userId}/matches`);
+  const matches = resMatches.matches;
+
+  const track: MatchResult[] = toMatchResults(userId, matches);
+  const latestMatch = toLatestMatch(userId, matches);
+  const stats = await http.getRequest<UserStats>(`/api/users/${userId}/stats`);
+
+  const publicProfile: MyProfile = {
+    id: userId,
+    email: user.email,
+    pseudo: user.pseudo,
+    is2faEnabled: false,
+    avatarUrl: user.avatar_url ?? DEFAULT_AVATAR,
+  };
+
+  return { profile: publicProfile, track, latestMatch, stats };
 }
 
 const DEFAULT_AVATAR = "/user.png";
@@ -292,21 +306,20 @@ function ProfileCard() {
 
   mount(body, row("Email", emailValue), row("2FA", twofaBadge), spacer);
 
-  function update(u: MyProfile) {
+  function update(u: MyProfile & { isMe?: boolean }) {
     uname.textContent = u.pseudo ?? "Pseudo";
     emailValue.textContent = u.email ?? "email@example.com";
     avatar.src = u.avatarUrl ?? DEFAULT_AVATAR;
-    if (u.is2faEnabled !== undefined) set2fa(u.is2faEnabled);
-    // Hide edit + 2FA badge for other users
-    // if (u.isMe !== undefined) {
-    //   if (u.isMe) {
-    //     if (!editBtn.isConnected) body.append(editBtn);
-    //     twofaBadge.parentElement!.classList.remove("hidden");
-    //   } else {
-    //     editBtn.remove();
-    //     twofaBadge.parentElement!.classList.add("hidden");
-    //   }
-    // }
+
+    const isMe = !!u.isMe;
+    if (isMe) {
+      set2fa(!!u.is2faEnabled);
+      if (!editBtn.isConnected) body.append(editBtn);
+      twofaBadge.parentElement!.classList.remove("hidden");
+    } else {
+      editBtn.remove();
+      twofaBadge.parentElement!.classList.add("hidden");
+    }
   }
 
   const splash = createSplashScreen("Edit Profile");
@@ -386,13 +399,8 @@ function ProfileCard() {
 
 /* ---------------- Main exported view ---------------- */
 // Reusable for me or any user
-export async function ProfileView(root: HTMLElement, userId: Id | "me" = "me") {
-  const state = {
-    isMe: true,
-    overview: null as OverviewResponse | null,
-    stats: null as Stats | null,
-  };
-
+export async function ProfileView(root: HTMLElement, params: { pseudo?: string } = {}) {
+  const isPublic = !!params.pseudo;
   root.className = "grid grid-cols-8 grid-rows-5 gap-3 px-8 py-12";
 
   // Build cards
@@ -409,22 +417,39 @@ export async function ProfileView(root: HTMLElement, userId: Id | "me" = "me") {
   tournamentsStats.el.className += " col-span-2 row-span-2";
   latestMatch.el.className += " col-span-4 row-span-1";
 
-  // Skeletons while fetching
-  const sk = (hgt = "h-24") => h("div", { class: `animate-pulse bg-slate-200/60 rounded-xl ${hgt}` });
+  // Initial skeleton
   root.replaceChildren(matchHistory.el, profileCard.el, winRate.el, tournamentsStats.el, latestMatch.el);
   matchHistory.update([]);
   winRate.update(null);
   tournamentsStats.update(null);
   latestMatch.update(null);
-  profileCard.update({ pseudo: "Loading…", email: "", avatarUrl: DEFAULT_AVATAR, twofaEnabled: false, isMe: state.isMe });
+  profileCard.update({ id: 0, pseudo: "Loading…", email: "", avatarUrl: DEFAULT_AVATAR, is2faEnabled: false, isMe: true });
 
   try {
-    // Fill UI
-    const data = await FetchingData();
-    profileCard.update(data.myProfileInfo);
-    matchHistory.update(data.track);
-    latestMatch.update(data.latestMatch);
-    winRate.update(data.stats);
+    if (!isPublic) {
+      // Me Mode
+      const data = await FetchingData();
+      profileCard.update({ ...data.myProfileInfo, isMe: true });
+      matchHistory.update(data.track);
+      latestMatch.update(data.latestMatch);
+      winRate.update(data.stats);
+    } else {
+      // Public Mode
+      const user = await fetchPublicUserByPseudo(params.pseudo!);
+      if (!user) {
+        profileCard.update({ id: 0, pseudo: "User not found", email: "", avatarUrl: DEFAULT_AVATAR, is2faEnabled: false, isMe: false });
+        matchHistory.update([]);
+        latestMatch.update(null);
+        winRate.update(null as any);
+        return () => {};
+      }
+
+      const { profile, track, latestMatch: lm, stats } = await fetchPublicOverview(user.id);
+      profileCard.update({ ...profile, isMe: false });
+      matchHistory.update(track);
+      latestMatch.update(lm);
+      winRate.update(stats);
+    }
   } catch (err: any) {}
 
   return () => {

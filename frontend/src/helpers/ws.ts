@@ -4,6 +4,13 @@
  * Lightweight WebSocket client with auto-reconnect + heartbeat (no globals)
  *
  */
+export type MatchSettingsWire = {
+  pointsToWin: 3 | 5 | 7 | 9;
+  paddleSize: "small" | "medium" | "large";
+  freeMove: boolean;
+  mode: "2d";
+  hostSide: "left" | "right";
+};
 
 /**
  * Classification of the incoming web socket properties
@@ -12,8 +19,47 @@ export type WsIncoming =
   | { type: "ready"; userId: number }
   | { type: "message"; chatId: number; message: any }
   | { type: "typing"; chatId: number; userId: number; isTyping: boolean; at: string }
+  | { type: "presence"; userId: number; online: boolean }
+  | { type: "friend_request"; id: number; from_user_id: number; to_user_id: number }
   | { type: "error"; code: string; message: string }
-  | { type: "pong"; at: string };
+  | { type: "pong"; at: string }
+
+  // Match lifecycle
+  | { type: "match_invite"; inviteId: number; from: number; to: number }
+  | { type: "match_invite_canceled"; inviteId: number }
+  | { type: "match_invite_response"; inviteId: number; accepted: boolean }
+
+  // Lobby + settings
+  | { type: "match_lobby"; matchId: number; hostId: number; guestId: number; settings: MatchSettingsWire; locked: boolean; ready: Record<number, boolean> }
+
+  // Ready / Cancel
+  | { type: "match_ready_state"; matchId: number; userId: number; ready: boolean }
+
+  // Countdown + start
+  | { type: "match_countdown"; matchId: number; seconds: number }
+  | { type: "match_start"; matchId: number; seed: number }
+
+  // Runtime: server-authoritative snapshots
+  | {
+      type: "match_snapshot";
+      matchId: number;
+      t: number;
+      state: {
+        ball: { x: number; y: number; vx: number; vy: number };
+        left: { x: number; y: number; vx: number; vy: number; score: number; id: number; name: string };
+        right: { x: number; y: number; vx: number; vy: number; score: number; id: number; name: string };
+        target: number;
+        freeMove: boolean;
+        paddleH: number;
+      };
+    }
+
+  // Pause/resume (host or server decides policy)
+  | { type: "match_paused"; matchId: number }
+  | { type: "match_resumed"; matchId: number }
+
+  // End
+  | { type: "match_over"; matchId: number; winnerId: number; scoreL: number; scoreR: number };
 
 /**
  *	A Listener is a function that takes a web socket as a parameter, performs some actions but does not return anything
@@ -105,7 +151,43 @@ export class Realtime {
     this.send({ type: "ping" });
   }
 
+  subscribeMatch(matchId: number) {
+    this.send({ type: "subscribe_match", matchId });
+  }
+
+  unsubscribeMatch(matchId: number) {
+    this.send({ type: "unsubscribe_match", matchId });
+  }
+
+  inviteSend(to: number) {
+    this.send({ type: "invite_send", to });
+  }
+
+  inviteCancel(inviteId: number) {
+    this.send({ type: "invite_cancel", inviteId });
+  }
+
+  inviteAnswer(inviteId: number, accept: boolean) {
+    this.send({ type: "invite_answer", inviteId, accept });
+  }
+
+  matchSetSettings(matchId: number, settings: MatchSettingsWire) {
+    this.send({ type: "match_settings", matchId, settings });
+  }
+
+  matchReady(matchId: number, ready: boolean) {
+    this.send({ type: "match_ready", matchId, ready });
+  }
+
+  matchInput(matchId: number, key: "up" | "down" | "left" | "right", pressed: boolean) {
+    this.send({ type: "match_input", matchId, key, pressed, at: performance.now() });
+  }
+
+  matchTogglePause(matchId: number) {
+    this.send({ type: "match_toggle_pause", matchId });
+  }
   /**
+   * Private functions :
    * Creates a web socket based on this class url and defines the callbacks
    * need by a web socket : onopen, onmessage, onclose and onerror
    */

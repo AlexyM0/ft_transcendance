@@ -1,13 +1,18 @@
 // ws_rooms.ts
 import type { WebSocket } from "@fastify/websocket";
 import type { Outgoing } from "./ws_types";
+import path from "node:path";
 
 export class Rooms {
   /**
-   * Maps : chatId -> set of sockets, userId -> set of sockets
+   * Maps :
+   * chatId -> set of sockets
+   * userId -> set of sockets
+   * matchId -> set of sockets
    * (One user can have multiple sockets: tabs/devices)
    */
   private chatSubs = new Map<number, Set<WebSocket>>();
+  private matchSubs = new Map<number, Set<WebSocket>>();
   private userSockets = new Map<number, Set<WebSocket>>();
 
   /**
@@ -28,6 +33,7 @@ export class Rooms {
     if (set.size === 0) this.userSockets.delete(userId);
   }
 
+  /** -- CHATS -- */
   /**
    * Subscribe a given socket to a given chatId
    */
@@ -56,6 +62,37 @@ export class Rooms {
     for (const ws of set) this.safeSend(ws, data);
   }
 
+  /** -- MATCHES -- */
+  /**
+   * Subscribe a socket to a given matchId
+   */
+  subscribeMatch(matchId: number, ws: WebSocket) {
+    if (!this.matchSubs.has(matchId)) this.matchSubs.set(matchId, new Set());
+    this.matchSubs.get(matchId)!.add(ws);
+  }
+
+  /**
+   * Unsubscribe a given socket from a given matchId
+   */
+  unsubscribeMatch(matchId: number, ws: WebSocket) {
+    const set = this.matchSubs.get(matchId);
+    if (!set) return;
+    set.delete(ws);
+    if (set.size === 0) this.matchSubs.delete(matchId);
+  }
+
+  /**
+   * Broadcast a payload to all sockets subscribed to a given matchId
+   */
+  broadcastToMatch(matchId: number, payload: Outgoing) {
+    const set = this.matchSubs.get(matchId);
+    if (!set) return;
+    const data = JSON.stringify(payload);
+    for (const ws of set) this.safeSend(ws, data);
+  }
+
+  /** -- USER CONNECTED -- */
+
   /**
    * Broadcast a payload to all sockets for each user in userIds
    */
@@ -66,6 +103,11 @@ export class Rooms {
       if (!set) continue;
       for (const ws of set) this.safeSend(ws, data);
     }
+  }
+
+  hasOnline(userId: number) {
+    const set = this.userSockets.get(userId);
+    return !!set && set.size > 0;
   }
 
   /**

@@ -18,6 +18,8 @@ import { Rooms } from "./ws_rooms";
 import { WsController } from "./ws_controller";
 import { getUserIdFromRequest } from "./ws_auth";
 import { Incoming, Outgoing } from "./ws_types";
+import * as friendsModel from "../models/friends.model";
+import { setRooms, broadcastToUsers } from "./ws_hub";
 
 const MAX_JSON = 4 * 1024;
 
@@ -25,6 +27,7 @@ async function wsPlugin(fastify: FastifyInstance) {
   await fastify.register(websocket, { options: { maxPayload: MAX_JSON } });
 
   const rooms = new Rooms();
+  setRooms(rooms);
   const controller = new WsController(fastify, rooms);
 
   fastify.get("/api/ws", { websocket: true }, async (ws: WebSocket, req: FastifyRequest) => {
@@ -39,9 +42,25 @@ async function wsPlugin(fastify: FastifyInstance) {
 
     rooms.addUserSocket(meId, ws);
 
+    // Notify friends that I am online
+    try {
+      const friendRows = friendsModel.listMyFriends(meId);
+      const friendIds = friendRows.map((r) => r.friend_id);
+      broadcastToUsers(friendIds, { type: "presence", userId: meId, online: true });
+    } catch {}
+
     ws.send(JSON.stringify({ type: "ready", userId: meId } as Outgoing));
 
+    try {
+      const friendRows = friendsModel.listMyFriends(meId);
+      for (const r of friendRows) {
+        const online = rooms.hasOnline(r.friend_id);
+        ws.send(JSON.stringify({ type: "presence", userId: r.friend_id, online }));
+      }
+    } catch {}
+
     const mySubs = new Set<number>();
+    const myMatchSubs = new Set<number>();
 
     ws.on("message", async (raw) => {
       const txt = typeof raw === "string" ? raw : Buffer.isBuffer(raw) ? raw.toString("utf8") : "";
@@ -57,6 +76,9 @@ async function wsPlugin(fastify: FastifyInstance) {
       if (msg.type === "subscribe" && Number.isInteger(msg.chatId)) mySubs.add(msg.chatId);
       if (msg.type === "unsubscribe" && Number.isInteger(msg.chatId)) mySubs.delete(msg.chatId);
 
+      if (msg.type === "subscribe_match" && Number.isInteger(msg.matchId)) myMatchSubs.add(msg.matchId);
+      if (msg.type === "unsubscribe_match" && Number.isInteger(msg.matchId)) myMatchSubs.delete(msg.matchId);
+
       try {
         await controller.onFrame(ws, meId, msg);
       } catch (e: any) {
@@ -69,7 +91,14 @@ async function wsPlugin(fastify: FastifyInstance) {
     ws.on("close", () => {
       rooms.removeUserSocket(meId, ws);
       for (const c of mySubs) rooms.unsubscribe(c, ws);
+      for (const m of myMatchSubs) rooms.unsubscribeMatch(m, ws);
       mySubs.clear();
+
+      try {
+        const friendRows = friendsModel.listMyFriends(meId);
+        const friendIds = friendRows.map((r) => r.friend_id);
+        broadcastToUsers(friendIds, { type: "presence", userId: meId, online: false });
+      } catch {}
     });
   });
 }

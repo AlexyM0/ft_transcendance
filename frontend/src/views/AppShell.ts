@@ -1,10 +1,9 @@
 // src/views/AppShell.ts
 import { domElem, mount, bind } from "../ui/DomElement";
-import { Button, IconButton, ImageButton } from "../ui/Button";
-import { Avatar } from "../ui/Avatar";
+import { IconButton, ImageButton } from "../ui/Button";
 import { Icon } from "../ui/Icons";
 import { auth, logout } from "../store/auth.store";
-import { loadUser, usersIndex } from "../store/usersIndex.store";
+import { usersIndex } from "../store/usersIndex.store";
 import type { PublicUser } from "../api/types";
 import { Chats } from "../helpers/chats.store";
 import { acceptFriendRequest, declineFriendRequest, searchUsers, sendFriendRequest, unfriend, type SearchHit } from "../api/friends";
@@ -23,6 +22,7 @@ function currentPath() {
 /** Map route path → human title. Adjust as you add pages. */
 function pageTitleFromPath(path: string) {
   if (path.startsWith("/play")) return "Play";
+  if (path.startsWith("/users")) return "Profile";
   if (path.startsWith("/profile")) return "Profile";
   if (path.startsWith("/chats")) return "Chats";
   if (path.startsWith("/tournaments")) return "Tournaments";
@@ -41,7 +41,9 @@ function NavLinkIcon(label: string, href: string, faClass: string) {
   const text = domElem("span", { class: "text-lg font-semibold", text: label });
   a.append(icon, text);
 
-  // initial active state
+  /**
+   * Initial active state
+   */
   const setActive = () => {
     const active = currentPath() === href;
     a.classList.toggle("text-teal-600", active);
@@ -77,7 +79,13 @@ const SideBar = () => {
   links.forEach((l) => nav.appendChild(l.el));
 
   const logoutBtn = domElem("button", { class: "px-3 py-4 bg-emerald-700 rounded-md text-white font-semibold hover:bg-emerald-700/50", text: "Logout" });
-  logoutBtn.addEventListener("click", () => logout());
+  logoutBtn.addEventListener("click", () => {
+    try {
+      Chats.shutdown();
+    } finally {
+      logout();
+    }
+  });
   logoutBtn.append(domElem("i", { class: "ml-3 fa-solid fa-right-from-bracket" }));
 
   wrap.append(brandBox, nav, logoutBtn);
@@ -119,7 +127,7 @@ const TopBar = (me: PublicUser) => {
   const searchHost = domElem("div", { class: "relative" });
   const searchBtn = IconButton("fa-magnifying-glass", "Search users", openSearch);
 
-  const inputWrap = domElem("div", { class: "hidden md:w-80 w-64 relative z-10" });
+  const inputWrap = domElem("div", { class: "md:w-80 w-64 relative z-10" });
   const input = domElem("input", {
     class: "w-full pl-3 pr-10 py-2 rounded-full border border-emerald-300 bg-white outline-none focus:ring-2 focus:ring-emerald-400 text-base",
     attributes: {
@@ -143,7 +151,7 @@ const TopBar = (me: PublicUser) => {
   const inputPos = domElem("div", { class: "relative" });
   mount(inputPos, input, loupeWrap);
   mount(inputWrap, inputPos);
-  mount(searchHost, searchBtn, inputWrap, dropdown);
+  mount(searchHost, inputWrap, dropdown);
 
   // Language toggle (persisted locally)
   const lang = (localStorage.getItem("lang") || "en").toLowerCase();
@@ -360,7 +368,7 @@ const TopBar = (me: PublicUser) => {
       dropdown.appendChild(row);
 
       row.addEventListener("click", () => {
-        location.hash = `#/profile`;
+        location.hash = `#/users/${encodeURIComponent(u.pseudo)}`;
         closeSearch();
       });
     });
@@ -458,6 +466,10 @@ export function AppShell(child: View) {
     const sideBar = SideBar();
     const mainArea = MainArea(me);
 
+    const beforeUnload = () => {
+      Chats.shutdown();
+    };
+    window.addEventListener("beforeunload", beforeUnload);
     Chats.init();
 
     mount(layout, sideBar.wrap, mainArea.box);
@@ -468,6 +480,7 @@ export function AppShell(child: View) {
 
     // Unmount : clean up in reverse order
     return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
       unmountChild();
     };
   };

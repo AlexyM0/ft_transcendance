@@ -7,7 +7,7 @@ import { bootstrapSession } from "./store/auth.store";
 
 const app = document.getElementById("app") as HTMLElement;
 
-const router = new Router(Routes, "#app", {
+export const router = new Router(Routes, "#app", {
   defaultPath: "/login",
   onBeforeEach: guard,
 });

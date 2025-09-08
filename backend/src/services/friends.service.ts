@@ -1,6 +1,7 @@
 // friends.service.ts
 import * as friendsModel from "../models/friends.model";
 import * as usersModel from "../models/users.model";
+import { broadcastToUsers } from "../plugins/ws_hub";
 import { db } from "../utils/db";
 import { err } from "../utils/errors";
 
@@ -9,6 +10,7 @@ export type Relation = "friend" | "outgoing_request" | "incoming_request" | "non
 function ensureUserExists(userId: number) {
   const user = usersModel.getPublicById(userId);
   if (!user) throw err("USER_NOT_FOUND");
+  return user;
 }
 
 export function relationBetween(meId: number, otherId: number): Relation {
@@ -42,6 +44,7 @@ export function sendFriendRequest(meId: number, toUserId: number) {
 
   try {
     const { id } = friendsModel.sendRequest(meId, toUserId);
+    broadcastToUsers([toUserId], { type: "friend_request", id, from_user_id: meId, to_user_id: toUserId });
     return { id };
   } catch (e: any) {
     if (String(e?.message).includes("SQLITE_CONSTRAINT")) {

@@ -1,1 +1,0 @@
-// src/store/GlobalState.ts

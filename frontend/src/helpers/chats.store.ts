@@ -5,7 +5,6 @@
  */
 
 import { type WsIncoming, Realtime } from "./ws";
-import * as http from "../api/http";
 
 /**
  * Types exposed to UI
@@ -27,6 +26,9 @@ type State = {
   messages: Record<number, ChatMessage[]>;
   typing: Record<number, Set<number>>; // chatId -> usersIds typing
   unread: Record<number, number>; // chatId -> count
+  presence: Record<number, boolean>; // userId -> online ?
+  friendRequestsCount: number;
+  meId: number | null;
   loading: boolean;
   error: string | null;
   activeChatId: number | null;
@@ -40,6 +42,9 @@ const state: State = {
   messages: {},
   typing: {},
   unread: {},
+  presence: {},
+  friendRequestsCount: 0,
+  meId: null,
   loading: false,
   error: null,
   activeChatId: null,
@@ -73,18 +78,40 @@ let stopWsListener: (() => void) | null = null;
 function onWs(msg: WsIncoming) {
   switch (msg.type) {
     case "ready":
+      state.meId = msg.userId;
       if (state.activeChatId) realtime.subscribe(state.activeChatId);
+      emit();
       break;
 
     case "message": {
       const { chatId, message } = msg;
-      if (!state.messages[chatId]) state.messages[chatId] = [];
-      if (state.messages[chatId].some((m) => m.id === message.id)) break;
-      state.messages[chatId].push(message);
-      const item = state.list.find((c) => c.id === chatId);
-      if (item) item.last_message = message;
 
-      if (state.activeChatId !== chatId) state.unread[chatId] = (state.unread[chatId] ?? 0) + 1;
+      if (!state.messages[chatId]) state.messages[chatId] = [];
+
+      const arr = state.messages[chatId];
+      const pendingIdx = arr.findIndex((m) => m.id < 0 && m.author_id === message.author_id && m.body === message.body);
+      if (pendingIdx >= 0) arr.splice(pendingIdx, 1);
+
+      // dedupe by id
+      if (!arr.some((m) => m.id === message.id)) {
+        arr.push(message);
+      }
+
+      // update last_message on the chat item
+      const idx = state.list.findIndex((c) => c.id === chatId);
+      if (idx >= 0) {
+        state.list[idx].last_message = message;
+
+        // move this chat top top (sort by recency)
+        const [it] = state.list.splice(idx, 1);
+        state.list.unshift(it);
+      }
+
+      // unread count if not active
+      if (state.activeChatId !== chatId) {
+        state.unread[chatId] = (state.unread[chatId] ?? 0) + 1;
+      }
+
       emit();
       break;
     }
@@ -93,6 +120,19 @@ function onWs(msg: WsIncoming) {
       const { chatId, userId, isTyping } = msg;
       if (!state.typing[chatId]) state.typing[chatId] = new Set();
       isTyping ? state.typing[chatId].add(userId) : state.typing[chatId].delete(userId);
+      emit();
+      break;
+    }
+
+    case "presence": {
+      const { userId, online } = msg;
+      state.presence[userId] = !!online;
+      emit();
+      break;
+    }
+
+    case "friend_request": {
+      state.friendRequestsCount++;
       emit();
       break;
     }
@@ -110,6 +150,8 @@ function onWs(msg: WsIncoming) {
 /**
  * Public API
  */
+let pendingSeq = 0;
+
 export const Chats = {
   async init() {
     if (!stopWsListener) {
@@ -167,7 +209,35 @@ export const Chats = {
   },
 
   async send(chatId: number, body: string) {
+    const myId = state.meId ?? 0;
+    const optimistic = {
+      id: -++pendingSeq,
+      author_id: myId,
+      body,
+      created_at: new Date().toISOString(),
+    } as ChatMessage;
+
+    if (!state.messages[chatId]) state.messages[chatId] = [];
+    state.messages[chatId].push(optimistic);
+
+    const idx = state.list.findIndex((c) => c.id === chatId);
+    if (idx >= 0) {
+      state.list[idx].last_message = optimistic as any;
+      const [it] = state.list.splice(idx, 1);
+      state.list.unshift(it);
+    }
+
+    emit();
+
     realtime.send({ type: "send", chatId, body });
+  },
+
+  shutdown() {
+    if (stopWsListener) {
+      stopWsListener();
+      stopWsListener = null;
+      realtime.close();
+    }
   },
 
   setTyping(chatId: number, isTyping: boolean) {
@@ -188,5 +258,24 @@ export const Chats = {
 
   getUnread(chatId: number) {
     return state.unread[chatId] ?? 0;
+  },
+
+  getOnline(userId: number) {
+    return !!state.presence[userId];
+  },
+
+  /** Find a chat id by peer user id (for badges) */
+  getChatIdByPeer(userId: number): number | null {
+    const item = state.list.find((c) => c.peer?.id === userId);
+    return item ? item.id : null;
+  },
+
+  /** Chats list already kept sorted by latest; expose it if needed */
+  getSortedList() {
+    return state.list;
+  },
+
+  getFriendRequestsCount() {
+    return state.friendRequestsCount;
   },
 };

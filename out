@@ -1,0 +1,380 @@
+// ws_auth.ts
+
+/**
+ * WebSocket wire protocol (client <-> server).
+ *
+ * One endpoint (/api/ws), multiple "domains" if needed later.
+ * For now we only use the "chat" domain.
+ *
+ * Client sends:
+ *  - subscribe/unsubscribe: start/stop receiving live events for a chat
+ *  - send: persist a message in DB and broadcast to subscribers
+ *  - typing: ephemeral "user is typing" signal (no DB write)
+ *  - ping: keep-alive / latency checks (server replies with "pong")
+ *
+ * Server sends:
+ *  - ready: handshake success (contains userId)
+ *  - message: new message persisted and fanned-out
+ *  - typing: other user's typing indicator
+ *  - error: structured error (e.g., auth, validation, rate-limit)
+ *  - pong: reply to ping
+ */
+
+import type { FastifyInstance, FastifyRequest } from "fastify";
+
+export async function getUserIdFromRequest(fastify: FastifyInstance, req: FastifyRequest): Promise<number> {
+  const token = req.cookies?.["session"];
+  if (!token) throw new Error("missing session cookie");
+
+  const decoded: any = await fastify.jwt.verify(token);
+  const id = Number(decoded?.sub);
+  if (!Number.isInteger(id) || id <= 0) throw new Error("bad sub");
+  return id;
+}
+//ws_controller.ts
+
+/**
+ * WebSocket controller = tiny router for frames.
+ * It does transport concerns (parse, rate-limit, broadcast), and delegates
+ * domain rules to your existing services (no duplication).
+ */
+import type { FastifyInstance } from "fastify";
+import type { WebSocket } from "ws";
+import type { Incoming, Outgoing } from "./ws_types";
+import { Rooms } from "./ws_rooms";
+import { RateLimiter } from "./ws_rateLimiter";
+import { err } from "../utils/errors";
+import * as chatService from "../services/chat.service";
+
+export class WsController {
+  private rateLimiter = new RateLimiter(10, 10_000);
+
+  constructor(private fastify: FastifyInstance, private rooms: Rooms) {}
+
+  private send(ws: WebSocket, payload: Outgoing) {
+    try {
+      if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(payload));
+    } catch {}
+  }
+
+  private pingFrameHandler(ws: WebSocket) {
+    this.send(ws, { type: "pong", at: new Date().toISOString() });
+  }
+
+  private subscribeFrameHandler(ws: WebSocket, meId: number, chatId: number) {
+    if (!Number.isInteger(chatId) || chatId <= 0) throw err("CHAT_NOT_FOUND");
+    chatService.assertMembership(meId, chatId);
+    this.rooms.subscribe(chatId, ws);
+  }
+
+  private unsubscribeFrameHandler(ws: WebSocket, chatId: number) {
+    if (!Number.isInteger(chatId) || chatId <= 0) return;
+    this.rooms.unsubscribe(chatId, ws);
+  }
+
+  private typingFrameHandler(meId: number, chatId: number, isTyping: boolean) {
+    if (!Number.isInteger(chatId) || chatId <= 0) throw err("CHAT_NOT_FOUND");
+    chatService.assertMembership(meId, chatId);
+    this.rooms.broadcastToChat(chatId, {
+      type: "typing",
+      chatId,
+      userId: meId,
+      isTyping: !!isTyping,
+      at: new Date().toISOString(),
+    });
+  }
+
+  private sendFrameHandler(ws: WebSocket, meId: number, chatId: number, body: string) {
+    if (!this.rateLimiter.allow(ws)) {
+      return this.send(ws, { type: "error", code: "RATE_LIMIT", message: "Too many messages" });
+    }
+
+    if (!Number.isInteger(chatId) || chatId <= 0) throw err("CHAT_NOT_FOUND");
+
+    const saved = chatService.sendChatMessage(meId, chatId, body);
+    const chat = chatService.assertMembership(meId, chatId);
+    const payload: Outgoing = { type: "message", chatId, message: saved };
+
+    this.rooms.broadcastToChat(chatId, payload);
+    this.rooms.broadcastToUsers([chat.user_a_id, chat.user_b_id], payload);
+  }
+
+  async onFrame(ws: WebSocket, meId: number, msg: Incoming) {
+    switch (msg.type) {
+      case "ping":
+        return this.pingFrameHandler(ws);
+      case "subscribe":
+        return this.subscribeFrameHandler(ws, meId, msg.chatId);
+      case "unsubscribe":
+        return this.unsubscribeFrameHandler(ws, msg.chatId);
+      case "typing":
+        return this.typingFrameHandler(meId, msg.chatId, msg.isTyping);
+      case "send":
+        return this.sendFrameHandler(ws, meId, msg.chatId, msg.body);
+    }
+  }
+}
+// src/plugins/ws_hub.ts
+import type { Outgoing } from "./ws_types";
+import { Rooms } from "./ws_rooms";
+
+let roomsSingleton: Rooms | null = null;
+
+export function setRooms(r: Rooms) {
+  roomsSingleton = r;
+}
+
+export function broadcastToUsers(userIds: number[], payload: Outgoing) {
+  if (!roomsSingleton) return;
+  roomsSingleton.broadcastToUsers(userIds, payload);
+}
+// ws_plugin.ts
+/**
+ * This plugin exposes GET /api/ws (HTTP handshake) and then switches
+ * the connection to the WebSocket protocol (101 Switching Protocols).
+ *
+ * After the upgrade:
+ *  - We authenticate using the same session cookie as HTTP routes
+ *  - We register the socket under the user's id
+ *  - We listen for JSON frames and forward them to the WsController
+ *  - We clean up on close (unsubscribe rooms, remove from user sockets)
+ */
+
+import fp from "fastify-plugin";
+import { FastifyInstance, FastifyRequest } from "fastify";
+import websocket, { WebsocketHandler } from "@fastify/websocket";
+import type { WebSocket } from "@fastify/websocket";
+import { Rooms } from "./ws_rooms";
+import { WsController } from "./ws_controller";
+import { getUserIdFromRequest } from "./ws_auth";
+import { Incoming, Outgoing } from "./ws_types";
+import * as friendsModel from "../models/friends.model";
+import { setRooms, broadcastToUsers } from "./ws_hub";
+
+const MAX_JSON = 4 * 1024;
+
+async function wsPlugin(fastify: FastifyInstance) {
+  await fastify.register(websocket, { options: { maxPayload: MAX_JSON } });
+
+  const rooms = new Rooms();
+  setRooms(rooms);
+  const controller = new WsController(fastify, rooms);
+
+  fastify.get("/api/ws", { websocket: true }, async (ws: WebSocket, req: FastifyRequest) => {
+    let meId: number;
+    try {
+      meId = await getUserIdFromRequest(fastify, req);
+    } catch {
+      const payload: Outgoing = { type: "error", code: "UNAUTHORIZED", message: "Invalid or missing session" };
+      ws.send(JSON.stringify(payload));
+      return ws.close(4401, "unauthorized");
+    }
+
+    rooms.addUserSocket(meId, ws);
+
+    // Notify friends that I am online
+    try {
+      const friendRows = friendsModel.listMyFriends(meId);
+      const friendIds = friendRows.map((r) => r.friend_id);
+      broadcastToUsers(friendIds, { type: "presence", userId: meId, online: true });
+    } catch {}
+
+    ws.send(JSON.stringify({ type: "ready", userId: meId } as Outgoing));
+
+    try {
+      const friendRows = friendsModel.listMyFriends(meId);
+      for (const r of friendRows) {
+        const online = rooms.hasOnline(r.friend_id);
+        ws.send(JSON.stringify({ type: "presence", userId: r.friend_id, online }));
+      }
+    } catch {}
+
+    const mySubs = new Set<number>();
+
+    ws.on("message", async (raw) => {
+      const txt = typeof raw === "string" ? raw : Buffer.isBuffer(raw) ? raw.toString("utf8") : "";
+      if (!txt || txt.length > MAX_JSON) return;
+
+      let msg: Incoming;
+      try {
+        msg = JSON.parse(txt);
+      } catch {
+        return ws.send(JSON.stringify({ type: "error", code: "BAD_JSON", message: "Invalid JSON" } satisfies Outgoing));
+      }
+
+      if (msg.type === "subscribe" && Number.isInteger(msg.chatId)) mySubs.add(msg.chatId);
+      if (msg.type === "unsubscribe" && Number.isInteger(msg.chatId)) mySubs.delete(msg.chatId);
+
+      try {
+        await controller.onFrame(ws, meId, msg);
+      } catch (e: any) {
+        const code = e?.code ?? "WS_ERROR";
+        const message = e?.message ?? "Error";
+        ws.send(JSON.stringify({ type: "error", code, message } satisfies Outgoing));
+      }
+    });
+
+    ws.on("close", () => {
+      rooms.removeUserSocket(meId, ws);
+      for (const c of mySubs) rooms.unsubscribe(c, ws);
+      mySubs.clear();
+
+      try {
+        const friendRows = friendsModel.listMyFriends(meId);
+        const friendIds = friendRows.map((r) => r.friend_id);
+        broadcastToUsers(friendIds, { type: "presence", userId: meId, online: false });
+      } catch {}
+    });
+  });
+}
+
+export default fp(wsPlugin, { name: "ws" });
+// ws_rateLimiter.ts
+import type { WebSocket } from "@fastify/websocket";
+
+/**
+ * - `count`: Number of allowed events in this window
+ * - `resetAt`: Epoch milliseconds when this window resets
+ */
+type Bucket = {
+  count: number;
+  resetAt: number;
+};
+
+/**
+ * Simple token-bucket rate limiter keyed by Websocket:
+ * - Each socket has its own bucket
+ * - Bucket resets after `windowMs`
+ * - Each allowed event increments `count`
+ * - Once `count` exceeds `limit`, allow() returns false until reset
+ */
+export class RateLimiter {
+  constructor(private limit: number, private windowMs: number) {}
+
+  /**
+   * Mapping between a WebSocket and current bucket state
+   */
+  private buckets = new WeakMap<WebSocket, Bucket>();
+
+  /**
+   * Attempt to allow an action for this socket.
+   * Returns true if allowed, false if rate limit exceeded
+   */
+  allow(ws: WebSocket) {
+    const now = Date.now();
+    let bucket = this.buckets.get(ws);
+
+    // First event or window expired -> reset bucket
+    if (!bucket || now >= bucket.resetAt) {
+      bucket = { count: 0, resetAt: now + this.windowMs };
+      this.buckets.set(ws, bucket);
+    }
+
+    // Actions limit exceeded -> reject
+    if (bucket.count >= this.limit) return false;
+
+    // Otherwise, increment and allow
+    bucket.count++;
+    return true;
+  }
+}
+// ws_rooms.ts
+import type { WebSocket } from "@fastify/websocket";
+import type { Outgoing } from "./ws_types";
+
+export class Rooms {
+  /**
+   * Maps : chatId -> set of sockets, userId -> set of sockets
+   * (One user can have multiple sockets: tabs/devices)
+   */
+  private chatSubs = new Map<number, Set<WebSocket>>();
+  private userSockets = new Map<number, Set<WebSocket>>();
+
+  /**
+   * Adds a given socket under the given userId
+   */
+  addUserSocket(userId: number, ws: WebSocket) {
+    if (!this.userSockets.has(userId)) this.userSockets.set(userId, new Set<WebSocket>());
+    this.userSockets.get(userId)!.add(ws);
+  }
+
+  /**
+   * Removes a given socket from the give userId's set; delete the set if empty
+   */
+  removeUserSocket(userId: number, ws: WebSocket) {
+    const set = this.userSockets.get(userId);
+    if (!set) return;
+    set.delete(ws);
+    if (set.size === 0) this.userSockets.delete(userId);
+  }
+
+  /**
+   * Subscribe a given socket to a given chatId
+   */
+  subscribe(chatId: number, ws: WebSocket) {
+    if (!this.chatSubs.has(chatId)) this.chatSubs.set(chatId, new Set<WebSocket>());
+    this.chatSubs.get(chatId)!.add(ws);
+  }
+
+  /**
+   * Unsubscribe a given socket from a given chatId
+   */
+  unsubscribe(chatId: number, ws: WebSocket) {
+    const set = this.chatSubs.get(chatId);
+    if (!set) return;
+    set.delete(ws);
+    if (set.size === 0) this.chatSubs.delete(chatId);
+  }
+
+  /**
+   * Broadcast a payload to all sockets subscribed to a given chatId
+   */
+  broadcastToChat(chatId: number, payload: Outgoing) {
+    const set = this.chatSubs.get(chatId);
+    if (!set) return;
+    const data = JSON.stringify(payload);
+    for (const ws of set) this.safeSend(ws, data);
+  }
+
+  /**
+   * Broadcast a payload to all sockets for each user in userIds
+   */
+  broadcastToUsers(userIds: number[], payload: Outgoing) {
+    const data = JSON.stringify(payload);
+    for (const uid of userIds) {
+      const set = this.userSockets.get(uid);
+      if (!set) continue;
+      for (const ws of set) this.safeSend(ws, data);
+    }
+  }
+
+  hasOnline(userId: number) {
+    const set = this.userSockets.get(userId);
+    return !!set && set.size > 0;
+  }
+
+  /**
+   * Sends data only if the socket is open; swallow network errors
+   */
+  private safeSend(ws: WebSocket, data: string) {
+    try {
+      if (ws.readyState === ws.OPEN) ws.send(data);
+    } catch {}
+  }
+}
+// ws_types.ts
+export type Incoming =
+  | { type: "ping" }
+  | { type: "subscribe"; chatId: number }
+  | { type: "unsubscribe"; chatId: number }
+  | { type: "typing"; chatId: number; isTyping: boolean }
+  | { type: "send"; chatId: number; body: string };
+
+export type Outgoing =
+  | { type: "ready"; userId: number }
+  | { type: "message"; chatId: number; message: any }
+  | { type: "typing"; chatId: number; userId: number; isTyping: boolean; at: string }
+  | { type: "presence"; userId: number; online: boolean }
+  | { type: "friend_request"; id: number; from_user_id: number; to_user_id: number }
+  | { type: "error"; code: string; message: string }
+  | { type: "pong"; at: string };
