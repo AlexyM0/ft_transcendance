@@ -5,8 +5,6 @@ import { Router } from "./router/router";
 import { Routes, guard } from "./router/routes";
 import { bootstrapSession } from "./store/auth.store";
 
-const app = document.getElementById("app") as HTMLElement;
-
 export const router = new Router(Routes, "#app", {
   defaultPath: "/login",
   onBeforeEach: guard,

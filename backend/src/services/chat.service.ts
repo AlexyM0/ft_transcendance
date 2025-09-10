@@ -43,7 +43,7 @@ export function assertMembership(meId: number, chatId: number) {
 
 export function getChatMessages(meId: number, chatId: number, limit = 50, offset = 0) {
   assertMembership(meId, chatId);
-  return chatModel.listMessagesAsc(chatId, limit, offset);
+  return chatModel.listMessagesDesc(chatId, limit, offset);
 }
 
 export function sendChatMessage(meId: number, chatId: number, body: string) {

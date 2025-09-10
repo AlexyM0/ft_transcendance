@@ -8,7 +8,7 @@ export function GameLocalDriver(
   state: MatchState,
   options?: {
     onScore?: (leftScore: number, rightScore: number) => void;
-    onOver?: (winnerId: number, leftScore: number, rightScore: number) => void;
+    onOver?: (leftScore: number, rightScore: number) => void;
   }
 ) {
   let last = performance.now();
@@ -48,7 +48,7 @@ export function GameLocalDriver(
           if (state.leftP.score >= state.pointsToWin || state.rightP.score >= state.pointsToWin) {
             const winner = state.leftP.score > state.rightP.score ? state.leftP : state.rightP;
             renderer.setOver(winner.name);
-            options?.onOver?.(winner.id, state.leftP.score, state.rightP.score);
+            options?.onOver?.(state.leftP.score, state.rightP.score);
           }
           break;
         }

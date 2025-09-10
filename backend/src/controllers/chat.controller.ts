@@ -31,7 +31,7 @@ export async function getMessagesFromAChat(req: FastifyRequest, rep: FastifyRepl
   if (!Number.isInteger(limit)) throw err("BAD_LIMIT");
   if (!Number.isInteger(offset)) throw err("BAD_OFFSET");
 
-  const messages = chatService.getChatMessages(meId, chatId, limit, offset);
+  const messages = chatService.getChatMessages(meId, chatId, limit, offset).reverse();
   rep.send({ chatId, messages, limit, offset });
 }
 

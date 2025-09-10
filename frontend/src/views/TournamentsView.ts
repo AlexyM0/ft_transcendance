@@ -1,7 +1,7 @@
 // src/views/TournamentsView.ts
 import { domElem as h, mount } from "../ui/DomElement";
 import { Avatar } from "../ui/Avatar";
-import { setPlayPreset } from "./PlayView";
+// import { setPlayPreset } from "./PlayView";
 
 /* =========================================================
    Types (UI-only; pure dummy data, no API)
@@ -650,7 +650,7 @@ export function TournamentsView(root: HTMLElement) {
           const p1 = { id: lPlayer.id, alias: lPlayer.alias, avatar: lPlayer.avatar };
           const p2 = { id: rPlayer.id, alias: rPlayer.alias, avatar: rPlayer.avatar };
 
-          setPlayPreset({ kind: "tournament", p1, p2 });
+          //   setPlayPreset({ kind: "tournament", p1, p2 });
           window.location.hash = "#/play";
         } else if (m.status === "in_progress") {
           window.location.hash = "#/play";

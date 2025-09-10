@@ -29,14 +29,14 @@ export function getPendingId(fromId: number, toId: number) {
 
 export function sendRequest(fromId: number, toId: number) {
   const insertRequest = db.prepare(`
-	INSERT INTO friend_requests (from_user_id, to_user_id) VALUES (?, ?) RETURNING id
+	INSERT INTO friend_requests (from_user_id, to_user_id) VALUES (?, ?) RETURNING id, from_user_id, to_user_id
   `);
-  return insertRequest.get(fromId, toId) as { id: number };
+  return insertRequest.get(fromId, toId) as { id: number; from_user_id: number; to_user_id: number };
 }
 
 export function getRequestById(id: number) {
   const getRequest = db.prepare(`SELECT * FROM friend_requests WHERE id = ?`);
-  return getRequest.get(id) as any | undefined;
+  return getRequest.get(id) as FriendRequestRow | undefined;
 }
 
 export function existingRequestBetween(a: number, b: number) {

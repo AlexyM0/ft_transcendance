@@ -1,7 +1,6 @@
 // friends.service.ts
 import * as friendsModel from "../models/friends.model";
 import * as usersModel from "../models/users.model";
-import { broadcastToUsers } from "../plugins/ws_hub";
 import { db } from "../utils/db";
 import { err } from "../utils/errors";
 
@@ -43,9 +42,8 @@ export function sendFriendRequest(meId: number, toUserId: number) {
   if (friendsModel.areFriends(meId, toUserId)) throw err("ALREADY_FRIENDS");
 
   try {
-    const { id } = friendsModel.sendRequest(meId, toUserId);
-    broadcastToUsers([toUserId], { type: "friend_request", id, from_user_id: meId, to_user_id: toUserId });
-    return { id };
+    const { id, from_user_id, to_user_id } = friendsModel.sendRequest(meId, toUserId);
+    return { id, from_user_id, to_user_id };
   } catch (e: any) {
     if (String(e?.message).includes("SQLITE_CONSTRAINT")) {
       throw err("FRIEND_REQUEST_ALREADY_EXISTS");
@@ -67,11 +65,11 @@ export function acceptFriendRequest(meId: number, requestId: number) {
 
   try {
     tx();
-    return { success: true };
+    return friendRequest;
   } catch (e: any) {
     if (String(e?.message).includes("SQLITE_CONSTRAINT")) {
       friendsModel.deleteRequest(requestId);
-      return { success: true };
+      return friendRequest;
     }
     throw e;
   }
@@ -83,7 +81,7 @@ export function declineRequest(meId: number, requestId: number) {
 
   if (friendRequest.to_user_id !== meId && friendRequest.from_user_id !== meId) throw err("FORBIDDEN"); // either request sender and receiver can cancel the invite
   friendsModel.deleteRequest(requestId);
-  return { success: true };
+  return friendRequest;
 }
 
 export function removeFriend(meId: number, friendId: number) {

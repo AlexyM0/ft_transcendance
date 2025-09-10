@@ -1,6 +1,6 @@
 // src/services/matches.runtime.service.ts
-import { broadcastToMatch } from "../plugins/ws_hub";
-import { type MatchSettingsWire, createDefaultSettingsWire } from "../plugins/ws_types";
+import { broadcastToMatch } from "../../utils/ws_rooms";
+import { type MatchSettingsWire, createDefaultSettingsWire } from "../ws_types";
 import { closeLobby, getLobby } from "./matches.lobby.service";
 
 const WORLD_W = 2000;

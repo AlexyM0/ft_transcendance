@@ -21,7 +21,7 @@ export type MessageRow = {
 const selectByPair = db.prepare(`SELECT id FROM chats WHERE user_a_id = ? AND user_b_id = ?`);
 const insertChat = db.prepare(`INSERT INTO chats (user_a_id, user_b_id) VALUES (?, ?) RETURNING id, user_a_id, user_b_id, created_at`);
 const insertMessage = db.prepare(`INSERT INTO messages (chat_id, author_id, body) VALUES (?, ?, ?) RETURNING id, created_at`);
-const selectMessagesAsc = db.prepare(`SELECT id, author_id, body, created_at FROM messages WHERE chat_id = ? ORDER BY created_at ASC LIMIT ? OFFSET ?`);
+const selectMessagesDesc = db.prepare(`SELECT id, author_id, body, created_at FROM messages WHERE chat_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`);
 const selectChatById = db.prepare(`SELECT id, user_a_id, user_b_id, created_at FROM chats WHERE id = ?`);
 const listChatsForUserQuery = db.prepare(`
 	SELECT
@@ -80,8 +80,8 @@ export function postMessage(chatId: number, authorId: number, body: string) {
   return insertMessage.get(chatId, authorId, body) as { id: number; created_at: string };
 }
 
-export function listMessagesAsc(chatId: number, limit = 50, offset = 0) {
-  return selectMessagesAsc.all(chatId, limit, offset) as MessageRow[];
+export function listMessagesDesc(chatId: number, limit = 50, offset = 0) {
+  return selectMessagesDesc.all(chatId, limit, offset) as MessageRow[];
 }
 
 export function listChatsForUser(userId: number, limit = 50, offset = 0) {

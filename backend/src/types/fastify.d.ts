@@ -2,6 +2,7 @@
 import "fastify";
 import type { FastifyReply, preHandlerHookHandler } from "fastify";
 import { UserType } from "@fastify/jwt";
+import { Rooms } from "../utils/ws_rooms";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -28,5 +29,7 @@ declare module "fastify" {
     githubOAuth2: any;
     googleOAuth2: any;
     fortyTwoOAuth2: any;
+
+    rooms: Rooms;
   }
 }

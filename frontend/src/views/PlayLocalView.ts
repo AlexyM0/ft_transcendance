@@ -216,7 +216,7 @@ async function rightSettingsPanel(state: Settings) {
   /** -- Start button */
   const separator = h("div", { class: "h-0.25 w-[60%] my-2 bg-emerald-700/20" });
 
-  const startLink = h("button", {
+  const startBtn = h("button", {
     class: "mt-1 inline-flex items-center justify-center px-4 py-3 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40",
     attributes: { href: "#/play/local" }, // final fallback href; we’ll override in handler
     text: "Start match",
@@ -224,11 +224,11 @@ async function rightSettingsPanel(state: Settings) {
 
   function canStart() {
     const ok = !!state.opponent;
-    startLink.toggleAttribute("disabled", !ok);
+    startBtn.toggleAttribute("disabled", !ok);
   }
 
-  startLink.addEventListener("click", async (e) => {
-    if (startLink.hasAttribute("aria-disabled")) {
+  startBtn.addEventListener("click", async (e) => {
+    if (startBtn.hasAttribute("aria-disabled")) {
       e.preventDefault();
       return;
     }
@@ -247,7 +247,7 @@ async function rightSettingsPanel(state: Settings) {
 
   canStart();
 
-  rightWrap.append(rightHeader, settingsWrap, separator, startLink);
+  rightWrap.append(rightHeader, settingsWrap, separator, startBtn);
   return { rightWrap, setSideOptionNames, canStart };
 }
 
@@ -267,7 +267,20 @@ export async function PlayLocalView(root: HTMLElement) {
 
   const panel = h("div", { class: "w-full grid md:grid-cols-2 gap-6 bg-white rounded-2xl border border-emerald-100 shadow" });
   panel.append(leftWrap, rightWrap);
-  root.append(panel);
+
+  const backBtn = h("button", { class: "px-6 py-2 bg-emerald-700 rounded rounded-lg flex flex-row gap-6 items-center text-white text-lg font-semibold hover:bg-emerald-400" });
+  const backIcon = h("i", { class: "fa-solid fa-circle-arrow-left" });
+  const backText = h("span", { text: "Back" });
+  backBtn.addEventListener("click", () => {
+    location.hash = `/play`;
+  });
+
+  backBtn.append(backIcon, backText);
+
+  const viewWrap = h("div", { class: "flex flex-col gap-6 items-center" });
+  viewWrap.append(panel, backBtn);
+
+  root.append(viewWrap);
 
   return () => {};
 }

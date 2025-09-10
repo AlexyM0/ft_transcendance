@@ -6,6 +6,7 @@ import { createGameLocalState } from "../helpers/GameLocalState";
 import type { Settings } from "./PlayLocalView";
 import type { MatchSettings, MatchState, Side } from "../helpers/GameTypes";
 import { Avatar } from "../ui/Avatar";
+import * as http from "../api/http";
 
 export function MatchLocalView(root: HTMLElement) {
   /** -- Config settings from PlayView */
@@ -62,8 +63,8 @@ export function MatchLocalView(root: HTMLElement) {
       leftInfoScore.textContent = String(leftScore);
       rightInfoScore.textContent = String(rightScore);
     },
-    onOver: (winnerId, l, r) => {
-      // Call API put /api/matches/:id
+    onOver: async (leftScore, rightScore) => {
+      await http.putRequest(`/api/matches/${state.matchId}/result`, { scoreP1: leftScore, scoreP2: rightScore });
       sessionStorage.removeItem("play:local:current");
     },
   });

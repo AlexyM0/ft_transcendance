@@ -13,6 +13,7 @@ import errorHandler from "../plugins/error-handler";
 import oauthProviders from "../plugins/oauth-providers";
 import fileUpload from "../plugins/file-upload";
 import tinyLogger from "../plugins/tinyLogger";
+import ws from "../plugins/ws_plugin";
 
 import { usersRoutes } from "../routes/user.routes";
 import { authRoutesPublic, authRoutesPending, authRoutesPrivate } from "../routes/auth.routes";
@@ -20,7 +21,7 @@ import { chatRoutes } from "../routes/chat.routes";
 import { friendsRoutes } from "../routes/friends.routes";
 import { matchesRoutes } from "../routes/matches.route";
 import { tournamentsRoutes } from "../routes/tournaments.routes";
-import ws from "../plugins/ws_plugin";
+import { wsRoutes } from "./ws.routes";
 
 export function setRouter(fastify: FastifyInstance) {
   // 1) Global plugins
@@ -33,6 +34,7 @@ export function setRouter(fastify: FastifyInstance) {
     showCookies: false, // flip to false if you don’t want cookies logged
     bodyLimit: 400, // adjust truncation
   });
+  fastify.register(ws);
 
   // 2) Public routes
   fastify.register(authRoutesPublic, { prefix: "/api/auth" });
@@ -52,6 +54,6 @@ export function setRouter(fastify: FastifyInstance) {
     privateFastify.register(chatRoutes, { prefix: "/api/chats" });
     privateFastify.register(matchesRoutes, { prefix: "/api/matches" });
     privateFastify.register(tournamentsRoutes, { prefix: "/api/tournaments" });
-    privateFastify.register(ws);
+    privateFastify.register(wsRoutes, { prefix: "/api/ws" });
   });
 }

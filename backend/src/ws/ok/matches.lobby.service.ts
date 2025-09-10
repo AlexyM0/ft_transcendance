@@ -1,6 +1,6 @@
 // src/services/matches.lobby.service.ts
-import { broadcastToUsers } from "../plugins/ws_hub";
-import { type MatchSettingsWire, createDefaultSettingsWire } from "../plugins/ws_types";
+import { broadcastToUsers } from "../../utils/ws_rooms";
+import { type MatchSettingsWire, createDefaultSettingsWire } from "../ws_types";
 
 type Invite = { id: number; from: number; to: number; createdAt: number };
 type Lobby = {

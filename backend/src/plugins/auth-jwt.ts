@@ -37,7 +37,7 @@ const issueSessionCookie = async function (rep: FastifyReply, payload: Record<st
     // sameSite: "lax",
     // secure: false,
     path: "/",
-    maxAge: 60 * 60,
+    maxAge: 4 * 60 * 60,
   });
 };
 

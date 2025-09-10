@@ -5,7 +5,7 @@ import { Icon } from "../ui/Icons";
 import { auth, logout } from "../store/auth.store";
 import { usersIndex } from "../store/usersIndex.store";
 import type { PublicUser } from "../api/types";
-import { Chats } from "../helpers/chats.store";
+import { Chats } from "../helpers/ChatsState";
 import { acceptFriendRequest, declineFriendRequest, searchUsers, sendFriendRequest, unfriend, type SearchHit } from "../api/friends";
 
 /**
