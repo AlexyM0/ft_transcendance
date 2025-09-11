@@ -2,7 +2,7 @@
 
 import { domElem as h, mount } from "../ui/DomElement";
 import { Avatar } from "../ui/Avatar";
-import { Chats, subscribe, type Friend, type Msg, type ReqUser } from "../helpers/ChatsState";
+import { Chats, subscribe, onTyping, type Friend, type Msg, type ReqUser } from "../helpers/ChatsState";
 import { auth } from "./../store/auth.store";
 import * as apiFriends from "../api/friends";
 
@@ -340,22 +340,16 @@ function LeftPanel(state: {
 /* ===================== CENTER PANEL ====================== */
 /* ========================================================= */
 
-function TopBarCenter(friend: Friend | null) {
+function TopBarCenter(friend: Friend | null, getActiveChatId: () => number | null) {
   const bar = h("div", { class: "h-14 px-4 border-b border-slate-100 flex items-center justify-between" });
   const left = h("div", { class: "flex items-center gap-3" });
+  const hint = h("div", { class: "text-xs text-slate-500 ml-3" });
+
   if (friend) {
     left.append(Avatar(friend.avatar, 32));
     left.append(h("div", { class: "font-semibold text-slate-800", text: friend.name }));
-
     const onlineNow = Chats.getOnline(friend.id);
     left.append(statusDot(onlineNow));
-
-    const hint = h("div", { class: "text-xs text-slate-500 ml-3" });
-    const chatId = Chats.getState().activeChatId;
-    if (chatId) {
-      const typing = Chats.getTypingUsers(chatId).filter((u) => u !== auth.get().meId);
-      if (typing.length) hint.textContent = "typing...";
-    }
     left.append(hint);
   } else {
     left.append(h("div", { class: "text-slate-400", text: "Select a friend" }));
@@ -365,7 +359,14 @@ function TopBarCenter(friend: Friend | null) {
     attributes: { placeholder: "Search…", type: "search" },
   });
   bar.append(left, search);
-  return bar;
+  const unsubscribeTyping = onTyping((chatId, userId, isTyping) => {
+    const active = getActiveChatId();
+    if (!active || chatId !== active) return;
+    const othersTyping = Chats.getTypingUsers(chatId).filter((u) => u !== Chats.getState().meId);
+    hint.textContent = othersTyping.length ? "typing..." : "";
+  });
+
+  return { bar, unsubscribeTyping };
 }
 
 function MessageBubble(m: Msg, isMine: boolean) {
@@ -416,12 +417,22 @@ function Composer(onSend: (text: string) => void) {
   }) as HTMLInputElement;
 
   let typingTimer: number | null = null;
+  let lastTypingSent = 0;
+
   input.addEventListener("input", () => {
     const chatId = Chats.getState().activeChatId;
     if (!chatId) return;
-    Chats.setTyping(chatId, true);
+
+    const now = Date.now();
+    if (now - lastTypingSent > 2000) {
+      Chats.setTyping(chatId, true);
+      lastTypingSent = now;
+    }
     if (typingTimer) clearTimeout(typingTimer);
-    typingTimer = window.setTimeout(() => Chats.setTyping(chatId, false), 1500);
+    typingTimer = window.setTimeout(() => {
+      Chats.setTyping(chatId, false);
+      lastTypingSent = 0;
+    }, 1500);
   });
 
   const send = h("button", {
@@ -448,7 +459,7 @@ function CenterPanel(state: { activeId: number | null }) {
   const box = h("section", { class: "bg-white flex flex-col min-h-0" });
 
   const friend = () => Chats.getFriends().find((f) => f.id === state.activeId) ?? null;
-  let top = TopBarCenter(friend());
+  let top = TopBarCenter(friend(), () => Chats.getState().activeChatId);
   const messageArea = h("div", { class: "flex-1 flex flex-col min-h-0" });
   let list = MessageList(messageArea, state.activeId);
   const composer = Composer(async (text) => {
@@ -459,13 +470,14 @@ function CenterPanel(state: { activeId: number | null }) {
     list.render(); // the WS "message" event will also re-render via store subscribe
   });
 
-  mount(box, top, messageArea, composer);
+  mount(box, top.bar, messageArea, composer);
   if (state.activeId) composer.classList.remove("hidden");
   else composer.classList.add("hidden");
 
   function render() {
-    const freshTop = TopBarCenter(friend());
-    box.replaceChild(freshTop, top);
+    top.unsubscribeTyping();
+    const freshTop = TopBarCenter(friend(), () => Chats.getState().activeChatId);
+    box.replaceChild(freshTop.bar, top.bar);
     top = freshTop;
 
     messageArea.replaceChildren();

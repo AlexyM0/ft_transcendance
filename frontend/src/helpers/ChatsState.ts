@@ -80,6 +80,18 @@ export function subscribe(fn: Listener) {
   return () => listeners.delete(fn);
 }
 
+type TypingListener = (chatId: number, usedId: number, isTyping: boolean) => void;
+const typingListeners = new Set<TypingListener>();
+
+function emitTyping(chatId: number, userId: number, isTyping: boolean) {
+  for (const l of typingListeners) l(chatId, userId, isTyping);
+}
+
+export function onTyping(fn: TypingListener) {
+  typingListeners.add(fn);
+  return () => typingListeners.delete(fn);
+}
+
 /**
  * WS wiring
  */
@@ -135,8 +147,18 @@ async function onWs(msg: AllWsIncoming) {
     case "chat_typing": {
       const { chatId, userId, isTyping } = msg;
       if (!state.typing[chatId]) state.typing[chatId] = new Set();
-      isTyping ? state.typing[chatId].add(userId) : state.typing[chatId].delete(userId);
-      emit();
+      const had = state.typing[chatId].has(userId);
+
+      let changed = false;
+      if (isTyping && !had) {
+        state.typing[chatId].add(userId);
+        changed = true;
+      } else if (!isTyping && had) {
+        state.typing[chatId].delete(userId);
+        changed = true;
+      }
+
+      if (changed) emitTyping(chatId, userId, !!isTyping);
       break;
     }
 
