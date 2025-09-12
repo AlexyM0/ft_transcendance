@@ -1,5 +1,5 @@
 // frontend/src/helpers/ws_types.ts
-import type { MatchSnapshot, MatchState } from "./GameTypes";
+import type { MatchSnapshot, MatchState, Side } from "./GameTypes";
 import type { LobbySnapshot, MatchSettingsSnapshot, UserStatus } from "./state_types";
 
 /* ================================================================= */
@@ -70,7 +70,7 @@ export type LobbyWsOutgoing = LWOInviteSend | LWOInviteCancel | LWOInviteAnswer 
 /**
  *  Match individual incoming WS messages types - one type defined per WS message type
  */
-export type MWICreated = { type: "match_created"; matchId: number; state: MatchState };
+export type MWICreated = { type: "match_created"; matchId: number; side: Side; snapshot: MatchSnapshot };
 export type MWISnapshot = { type: "match_snapshot"; matchId: number; snapshot: MatchSnapshot };
 
 /**

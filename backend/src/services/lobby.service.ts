@@ -233,6 +233,7 @@ export function setReady(lobbyId: number, userId: number, ready: boolean) {
   if (userId === lobby.hostId && ready) {
     const match = matchService.createMatch(lobby.hostId, lobby.guestId);
     const hostSide = lobby.settings.hostSide;
+    const guestSide = hostSide === "left" ? "right" : "left";
     const me = match.p1_id === lobby.hostId ? { id: match.p1_id, name: match.p1_pseudo, avatar_url: match.p1_avatar_url } : { id: match.p2_id, name: match.p2_pseudo, avatar_url: match.p2_avatar_url };
     const opp =
       match.p1_id === lobby.guestId ? { id: match.p1_id, name: match.p1_pseudo, avatar_url: match.p1_avatar_url } : { id: match.p2_id, name: match.p2_pseudo, avatar_url: match.p2_avatar_url };
@@ -247,9 +248,14 @@ export function setReady(lobbyId: number, userId: number, ready: boolean) {
       settings: lobby.settings,
     });
 
-    const payload: MWOCreated = { type: "match_created", matchId: match.id, state: matchRuntime.state };
+    const hostPayload: MWOCreated = { type: "match_created", matchId: match.id, side: hostSide, snapshot: matchStateToSnapshot(matchRuntime.state) };
+    const guestPayload: MWOCreated = { type: "match_created", matchId: match.id, side: guestSide, snapshot: matchStateToSnapshot(matchRuntime.state) };
+
     closeLobby(lobbyId, "match_created");
-    return { targets: [lobby.hostId, lobby.guestId], payload };
+    return [
+      { targets: [lobby.hostId], payload: hostPayload },
+      { targets: [lobby.guestId], payload: guestPayload },
+    ];
   }
 }
 

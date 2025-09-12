@@ -11,6 +11,7 @@ import { Realtime } from "../helpers/ws";
 import type { AllWsIncoming, MWOInput, MWOTogglePause } from "../helpers/ws_types";
 import { applySnapshotToMatch } from "../helpers/GameSnapshot";
 import { auth } from "../store/auth.store";
+import { createGameOnlineState } from "../helpers/GameOnlineState";
 
 export function MatchOnlineView(root: HTMLElement) {
   /** -- Config settings from PlayView */
@@ -20,8 +21,9 @@ export function MatchOnlineView(root: HTMLElement) {
     return () => {};
   }
 
-  const { matchId, state } = JSON.parse(raw) as { matchId: number; state: MatchState };
-  const hostSide = auth.get().meId === state.leftP.id ? "left" : "right";
+  const { matchId, side, snapshot } = JSON.parse(raw) as { matchId: number; side: Side; snapshot: MatchSnapshot };
+  const mySide: Side = side;
+  const state: MatchState = createGameOnlineState(matchId, snapshot);
 
   /** -- DOM elements */
   const wrap = h("div", { class: "flex-1 min-h-0 grid place-items-center bg-emerald-50" });
@@ -35,53 +37,74 @@ export function MatchOnlineView(root: HTMLElement) {
 
   /** -- DOM Elements - Header content set with game settings */
   const leftInfoWrap = h("div", { class: "flex items-center gap-2" });
-  const leftInfoAvatar = Avatar(state.leftP.avatar_url, 28);
-  const leftInfoName = h("span", { class: "font-bold", text: state.leftP.name });
+  const leftInfoAvatar = Avatar(snapshot.leftP.avatar_url, 28);
+  const leftInfoName = h("span", { class: "font-bold", text: snapshot.leftP.name });
   const leftInfoScore = h("span", { class: "ml-2 font-bold text-lg text-emerald-700 bg-white rounded-lg min-w-10 text-center shadow", text: String(state.leftP.score) });
   mount(leftInfoWrap, leftInfoAvatar, leftInfoName, leftInfoScore);
 
   const rightInfoWrap = h("div", { class: "flex items-center gap-2" });
   const rightInfoScore = h("span", { class: "mr-2 font-bold text-lg text-emerald-700 bg-white rounded-lg min-w-10 text-center shadow", text: String(state.rightP.score) });
-  const rightInfoName = h("span", { class: "font-bold", text: state.rightP.name });
-  const rightInfoAvatar = Avatar(state.rightP.avatar_url, 28);
+  const rightInfoName = h("span", { class: "font-bold", text: snapshot.rightP.name });
+  const rightInfoAvatar = Avatar(snapshot.rightP.avatar_url, 28);
   mount(rightInfoWrap, rightInfoScore, rightInfoName, rightInfoAvatar);
 
   mount(header, leftInfoWrap, rightInfoWrap);
 
+  /** -- Overlay sync derived from unified MatchState */
+  const syncOverlayFromState = () => {
+    switch (state.phase) {
+      case "playing":
+        renderer.setPaused(false);
+        renderer.setCountdown(null);
+        renderer.setOver(null);
+        break;
+      case "countdown": {
+        const secs = state.pauseCooldownAt ? Math.max(0, Math.ceil((state.pauseCooldownAt - Date.now()) / 1000)) : 0;
+        renderer.setPaused(true);
+        renderer.setCountdown(secs);
+        renderer.setOver(null);
+        break;
+      }
+      case "paused":
+        renderer.setPaused(true);
+        renderer.setCountdown(null);
+        renderer.setOver(null);
+        break;
+      case "over":
+        renderer.setPaused(true);
+        renderer.setCountdown(null);
+        renderer.setOver(state.winner?.name ?? null);
+        break;
+    }
+  };
+
   /** -- Game driver */
   const rt = new Realtime("/api/ws");
   const stop = rt.on((msg: AllWsIncoming) => {
+    if (msg.type === "ready") {
+      rt.send({ type: "match_subscribe", matchId });
+      // optional: kick off countdown if initial phase is paused
+      rt.send({ type: "match_toggle_pause", matchId } satisfies MWOTogglePause);
+      return; // don't fall through on the same frame
+    }
+
     if (msg.type === "match_snapshot" && msg.matchId === matchId) {
-      applySnapshotToMatch(state, msg.snapshot);
-      renderer.draw(state);
+      applySnapshotToMatch(state, msg.snapshot); // must set state.phase/pauseCooldownAt/winner from snapshot.runtime
       leftInfoScore.textContent = String(state.leftP.score);
       rightInfoScore.textContent = String(state.rightP.score);
-    } else if (msg.type === "match_paused" && msg.matchId === matchId) {
-      renderer.setPaused(true);
-      renderer.setCountdown(null);
-    } else if (msg.type === "match_countdown" && msg.matchId === matchId) {
-      renderer.setPaused(true);
-      renderer.setCountdown(msg.seconds);
-    } else if (msg.type === "match_resumed" && msg.matchId === matchId) {
-      renderer.setPaused(false);
-      renderer.setCountdown(null);
-    } else if (msg.type === "match_score" && msg.matchId === matchId) {
-      leftInfoScore.textContent = String(msg.left);
-      rightInfoScore.textContent = String(msg.right);
-    } else if (msg.type === "match_over" && msg.matchId === matchId) {
-      renderer.setPaused(true);
-      renderer.setCountdown(null);
-      renderer.setOver(msg.winner);
+      leftInfoName.textContent = state.leftP.name;
+      rightInfoName.textContent = state.rightP.name;
+      syncOverlayFromState();
     }
   });
 
   rt.connect();
   rt.send({ type: "match_subscribe", matchId });
-  rt.send({ type: "match_toggle_pause", matchId });
 
   /** -- Keyboard mapping to inputs */
   const leftKeys = { up: "z", down: "s", left: "q", right: "d" };
   const rightKeys = { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" };
+  const findKey = (map: Record<string, string>, key: string) => (Object.entries(map).find(([, k]) => k === key)?.[0] as keyof typeof map | undefined) ?? undefined;
 
   const keyDownHandler = (e: KeyboardEvent) => {
     if (e.key === " " && !e.repeat) {
@@ -90,21 +113,19 @@ export function MatchOnlineView(root: HTMLElement) {
       return;
     }
 
-    const hit = (map: any) => Object.entries(map).find(([, k]) => k === e.key)?.[0] as keyof typeof map | undefined;
-    const map = hostSide === "left" ? leftKeys : rightKeys;
-    const k = hit(map);
+    const map = mySide === "left" ? leftKeys : rightKeys;
+    const k = findKey(map as any, e.key);
     if (k) {
-      rt.send({ type: "match_input", matchId, key: k as "left" | "right" | "up" | "down", pressed: true } satisfies MWOInput);
+      rt.send({ type: "match_input", matchId, key: k as "up" | "down" | "left" | "right", pressed: true } satisfies MWOInput);
       e.preventDefault();
     }
   };
 
   const keyUpHandler = (e: KeyboardEvent) => {
-    const hit = (map: any) => Object.entries(map).find(([, k]) => k === e.key)?.[0] as keyof typeof map | undefined;
-    const map = hostSide === "left" ? leftKeys : rightKeys;
-    const k = hit(map);
+    const map = mySide === "left" ? leftKeys : rightKeys;
+    const k = findKey(map as any, e.key);
     if (k) {
-      rt.send({ type: "match_input", matchId, key: k as "left" | "right" | "up" | "down", pressed: true } satisfies MWOInput);
+      rt.send({ type: "match_input", matchId, key: k as "up" | "down" | "left" | "right", pressed: false } satisfies MWOInput);
       e.preventDefault();
     }
   };
@@ -112,9 +133,17 @@ export function MatchOnlineView(root: HTMLElement) {
   window.addEventListener("keydown", keyDownHandler, { passive: false });
   window.addEventListener("keyup", keyUpHandler, { passive: false });
 
+  // Initial paint reflects bootstrap snapshot
+  syncOverlayFromState();
+  renderer.draw(state);
+
   // Draw loop just for smooth visuals between snapshots (optional)
   let raf = 0;
   const drawLoop = () => {
+    if (state.phase === "countdown") {
+      const secs = state.pauseCooldownAt ? Math.max(0, Math.ceil((state.pauseCooldownAt - Date.now()) / 1000)) : 0;
+      renderer.setCountdown(secs);
+    }
     renderer.draw(state);
     raf = requestAnimationFrame(drawLoop);
   };

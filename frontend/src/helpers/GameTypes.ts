@@ -47,6 +47,11 @@ export type Inputs = {
 
 export type InputKeys = "up" | "down" | "left" | "right";
 
+export type PlayerLight = {
+  userId: number;
+  side: Side;
+};
+
 export type PlayerState = {
   id: number;
   name: string;
@@ -92,26 +97,41 @@ export type MatchSettings = {
   hostSide: Side;
 };
 
+/** Only for server side */
+// export type MatchRuntime = {
+//   matchId: number;
+//   state: MatchState;
+//   players: { left: PlayerLight; right: PlayerLight };
+//   subs: Set<WebSocket>;
+//   raf: NodeJS.Timeout | null;
+//   lastHr: bigint;
+// };
+
 export type MatchPhase = "playing" | "paused" | "countdown" | "over";
 
 export type MatchState = {
   matchId: number;
-  paused: boolean;
+
+  // Settings
   pointsToWin: number;
   paddleHeight: number;
   freeMove: boolean;
+
+  // Players and ball
   leftP: PlayerState;
   rightP: PlayerState;
   ball: BallState;
-  // Timers
-  pauseCooldownAt?: number;
+
+  // Game runtime
+  phase: MatchPhase;
+  pauseCooldownAt?: number | null;
+  winner?: { id: number; name: string } | null;
 };
 
-export type BallSnapshot = {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
+export type SettingsSnapshot = {
+  pointsToWin: number;
+  paddleHeight: number;
+  freeMove: boolean;
 };
 
 export type PlayerSnapshot = {
@@ -125,22 +145,23 @@ export type PlayerSnapshot = {
   avatar_url: string | null;
 };
 
-export type SettingsSnapshot = {
-  pointsToWin: number;
-  freeMove: boolean;
-  paddleHeight: number;
+export type BallSnapshot = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
 };
 
 export type RuntimeSnapshot = {
   phase: MatchPhase;
-  countdownMs?: number;
+  pauseCooldownAt?: number | null;
   winner?: { id: number; name: string } | null;
-  serverNowMs: number;
 };
 
 export type MatchSnapshot = {
-  ball: BallSnapshot;
+  settings: SettingsSnapshot;
   leftP: PlayerSnapshot;
   rightP: PlayerSnapshot;
-  settings: SettingsSnapshot;
+  ball: BallSnapshot;
+  runtime: RuntimeSnapshot;
 };

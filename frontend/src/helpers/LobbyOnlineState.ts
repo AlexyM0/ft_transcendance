@@ -1,6 +1,6 @@
 // frontend/src/helpers/LobbyOnlineState.ts
 import { Realtime } from "./ws";
-import type { AllWsIncoming, LWOInviteAnswer, LWOInviteCancel, LWOInviteSend, LWOLeave, LWOReady, LWOSetSettings } from "./ws_types";
+import type { AllWsIncoming, LWOInviteAnswer, LWOInviteCancel, LWOInviteSend, LWOLeave, LWOReady, LWOSetSettings, MWICreated } from "./ws_types";
 import type { UserStatus, PublicUser, LobbySnapshot, MatchSettingsSnapshot, LobbyState } from "./state_types";
 
 const defaultSettings: MatchSettingsSnapshot = {
@@ -149,7 +149,7 @@ function onWs(msg: AllWsIncoming) {
     case "match_created": {
       if (state.lobbySnapshot) {
         state.lobbySnapshot.locked = true;
-        sessionStorage.setItem(`play:online:current`, JSON.stringify({ matchId: msg.matchId, state: msg.state }));
+        sessionStorage.setItem(`play:online:current`, JSON.stringify({ matchId: msg.matchId, side: msg.side, snapshot: msg.snapshot }));
         location.hash = `/play/online/m`;
       }
       emit();

@@ -88,13 +88,15 @@ export function createGameLocalState(
 
   const matchState: MatchState = {
     matchId: matchId,
-    paused: true,
     pointsToWin: settings.pointsToWin,
-    freeMove: settings.freeMove,
     paddleHeight: paddleHeight,
+    freeMove: settings.freeMove,
     leftP,
     rightP,
     ball,
+    phase: "paused",
+    pauseCooldownAt: null,
+    winner: null,
   };
 
   return matchState;

@@ -1,25 +1,18 @@
 // src/helpers/GameLocalState.ts
-import { WORLD_W, WORLD_H, PADDLE_WIDTH, PADDLE_HEIGHTS } from "./GameConstants";
-import type { MatchSettings, MatchState, PlayerState, BallState, Side } from "./GameTypes";
+import { WORLD_W, WORLD_H, PADDLE_WIDTH } from "./GameConstants";
+import type { MatchState, PlayerState, BallState, MatchSnapshot } from "./GameTypes";
 
-export function createGameOnlineState(
-  matchId: number,
-  me: { id: number; name: string; avatar_url: string | null },
-  opp: { id: number; name: string; avatar_url: string | null },
-  mySide: Side,
-  settings: MatchSettings
-): MatchState {
-  const paddleHeight = PADDLE_HEIGHTS[settings.paddleHeight];
+export function createGameOnlineState(matchId: number, snapshot: MatchSnapshot): MatchState {
+  const paddleHeight = snapshot.settings.paddleHeight;
   const margin = 18;
   const midY = (WORLD_H - paddleHeight) / 2;
   const half = WORLD_W / 2;
   const marginFreeMove = 10;
 
-  const leftIsMe = mySide === "left";
   const leftP: PlayerState = {
-    id: leftIsMe ? me.id : opp.id,
-    name: leftIsMe ? me.name : opp.name,
-    avatar_url: leftIsMe ? me.avatar_url : opp.avatar_url,
+    id: snapshot.leftP.id,
+    name: snapshot.leftP.name,
+    avatar_url: snapshot.leftP.avatar_url,
     side: "left" as const,
     paddle: {
       x: margin,
@@ -44,9 +37,9 @@ export function createGameOnlineState(
   };
 
   const rightP: PlayerState = {
-    id: leftIsMe ? opp.id : me.id,
-    name: leftIsMe ? opp.name : me.name,
-    avatar_url: leftIsMe ? opp.avatar_url : me.avatar_url,
+    id: snapshot.rightP.id,
+    name: snapshot.rightP.name,
+    avatar_url: snapshot.rightP.avatar_url,
     side: "right" as const,
     paddle: {
       x: WORLD_W - margin - PADDLE_WIDTH,
@@ -88,15 +81,15 @@ export function createGameOnlineState(
 
   const matchState: MatchState = {
     matchId: matchId,
-    pointsToWin: settings.pointsToWin,
+    pointsToWin: snapshot.settings.pointsToWin,
     paddleHeight: paddleHeight,
-    freeMove: settings.freeMove,
+    freeMove: snapshot.settings.freeMove,
     leftP,
     rightP,
     ball,
-    phase: "paused",
-    pauseCooldownAt: null,
-    winner: null,
+    phase: snapshot.runtime.phase,
+    pauseCooldownAt: snapshot.runtime.pauseCooldownAt ?? null,
+    winner: snapshot.runtime.winner ?? null,
   };
 
   return matchState;

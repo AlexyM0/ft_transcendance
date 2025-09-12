@@ -14,52 +14,78 @@ export function GameLocalDriver(
   let last = performance.now();
   let raf = 0;
 
-  let resumeAt: number | null = null;
+  function syncOverlay() {
+    switch (state.phase) {
+      case "playing": {
+        renderer.setPaused(false);
+        renderer.setCountdown(null);
+        renderer.setOver(null);
+        break;
+      }
+      case "countdown": {
+        const secs = state.pauseCooldownAt ? Math.max(0, Math.ceil((state.pauseCooldownAt - performance.now()) / 1000)) : 0;
+        renderer.setPaused(true);
+        renderer.setCountdown(secs);
+        renderer.setOver(null);
+      }
+      case "paused": {
+        renderer.setPaused(true);
+        renderer.setCountdown(null);
+        renderer.setOver(null);
+      }
+      case "over": {
+        renderer.setPaused(true);
+        renderer.setCountdown(null);
+        renderer.setOver(state.winner?.name ?? null);
+      }
+    }
+  }
 
   function tick(t: number) {
     const deltaTime = (t - last) / 1000;
     last = t;
 
-    if (state.paused && resumeAt !== null) {
-      const msLeft = resumeAt - t;
-      const secLeft = Math.ceil(msLeft / 1000);
-      renderer.setCountdown(msLeft > 0 ? Math.max(0, secLeft) : null);
-
-      if (msLeft <= 0) {
-        state.paused = false;
-        resumeAt = null;
-        renderer.setPaused(false);
-        renderer.setCountdown(null);
+    if (state.phase === "countdown" && state.pauseCooldownAt) {
+      if (t >= state.pauseCooldownAt) {
+        state.phase = "playing";
+        state.pauseCooldownAt = undefined;
+        syncOverlay();
+      } else {
+        const secs = Math.max(0, Math.ceil((state.pauseCooldownAt - t) / 1000));
+        renderer.setCountdown(secs);
       }
     }
 
-    if (!state.paused) {
+    if (state.phase === "playing") {
       let remaining = deltaTime;
-      let sub = 1 / 240;
+      const sub = 1 / 240;
       while (remaining > 0) {
         const s = Math.min(sub, remaining);
         const scorer = step(state, s);
         if (scorer) {
           options?.onScore?.(state.leftP.score, state.rightP.score);
-          state.paused = true;
-          resumeAt = null;
-          renderer.setPaused(true);
-          renderer.setCountdown(null);
-          if (state.leftP.score >= state.pointsToWin || state.rightP.score >= state.pointsToWin) {
+          const over = state.leftP.score >= state.pointsToWin || state.rightP.score >= state.pointsToWin;
+          if (over) {
             const winner = state.leftP.score > state.rightP.score ? state.leftP : state.rightP;
-            renderer.setOver(winner.name);
+            state.phase = "over";
+            state.winner = { id: winner.id, name: winner.name };
             options?.onOver?.(state.leftP.score, state.rightP.score);
+          } else {
+            state.phase = "paused";
           }
+          syncOverlay();
           break;
         }
         remaining -= s;
       }
     }
+
     renderer.draw(state);
     raf = requestAnimationFrame(tick);
   }
 
   function start() {
+    syncOverlay();
     raf = requestAnimationFrame(tick);
   }
 
@@ -73,25 +99,18 @@ export function GameLocalDriver(
   }
 
   function togglePause() {
-    if (state.leftP.score >= state.pointsToWin || state.rightP.score >= state.pointsToWin) return;
-
-    const now = performance.now();
-
-    if (!state.paused) {
-      state.paused = true;
-      resumeAt = null;
-      renderer.setPaused(true);
-      renderer.setCountdown(null);
+    if (state.phase === "over") return;
+    if (state.phase === "playing") {
+      state.phase = "paused";
+      state.pauseCooldownAt = undefined;
+      syncOverlay();
       return;
     }
-
-    if (resumeAt !== null) {
-      return;
+    if (state.phase === "paused") {
+      state.phase = "countdown";
+      state.pauseCooldownAt = performance.now() + 3000;
+      syncOverlay();
     }
-
-    resumeAt = now + 3000;
-    renderer.setPaused(true);
-    renderer.setCountdown(3);
   }
 
   return { start, stop, input, togglePause };

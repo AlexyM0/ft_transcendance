@@ -1,10 +1,11 @@
 // backend/src/services/game.service.ts
-import type { RawData, WebSocket } from "ws";
+import type { WebSocket } from "ws";
 import { step } from "../utils/GamePhysics";
 import { matchStateToSnapshot } from "../utils/GameSnapshot";
-import type { MatchState, MatchRuntime, InputKeys, Side, MatchSettings } from "../utils/GameTypes";
+import type { MatchState, MatchRuntime, InputKeys, Side, MatchSettings, MatchSnapshot } from "../utils/GameTypes";
 import { createGameOnlineState } from "../utils/GameOnlineState";
 import { MWOSnapshot } from "../types/ws_types";
+import { run } from "node:test";
 
 /** Data structure */
 const matches = new Map<number, MatchRuntime>();
@@ -21,7 +22,12 @@ function safeSend(ws: WebSocket, payload: any) {
   } catch {}
 }
 
-function broadcast(m: MatchRuntime, payload: any) {
+function broadcastSnapshot(m: MatchRuntime) {
+  const payload: MWOSnapshot = {
+    type: "match_snapshot",
+    matchId: m.matchId,
+    snapshot: matchStateToSnapshot(m.state),
+  };
   for (const ws of m.subs) safeSend(ws, payload);
 }
 
@@ -36,10 +42,14 @@ export function createMatch(options: {
   hostSide: Side;
   settings: MatchSettings;
 }) {
-  const matchState: MatchState = createGameOnlineState(options.matchId, options.me, options.opp, options.hostSide, options.settings);
-  const matchRuntime: MatchRuntime = {
+  const state: MatchState = createGameOnlineState(options.matchId, options.me, options.opp, options.hostSide, options.settings);
+  state.phase = state.phase ?? "paused";
+  state.pauseCooldownAt = state.pauseCooldownAt ?? null;
+  state.winner = null;
+
+  const runtime: MatchRuntime = {
     matchId: options.matchId,
-    state: matchState,
+    state,
     players: {
       left: { userId: options.leftUserId, side: "left" },
       right: { userId: options.rightUserId, side: "right" },
@@ -47,13 +57,11 @@ export function createMatch(options: {
     subs: new Set(),
     raf: null,
     lastHr: process.hrtime.bigint(),
-    paused: true,
-    resumeAtMs: null,
   };
 
-  matches.set(options.matchId, matchRuntime);
-  startLoop(matchRuntime);
-  return matchRuntime;
+  matches.set(options.matchId, runtime);
+  startLoop(runtime);
+  return runtime;
 }
 
 export function destroyMatch(matchId: number) {
@@ -63,6 +71,11 @@ export function destroyMatch(matchId: number) {
   matches.delete(matchId);
 }
 
+export function getSnapshot(matchId: number): MatchSnapshot | null {
+  const m = matches.get(matchId);
+  return m ? matchStateToSnapshot(m.state) : null;
+}
+
 export function subscribe(matchId: number, ws: WebSocket) {
   const m = matches.get(matchId);
   if (!m) return false;
@@ -70,12 +83,21 @@ export function subscribe(matchId: number, ws: WebSocket) {
   m.subs.add(ws);
   safeSend(ws, { type: "match_snapshot", matchId, snapshot: matchStateToSnapshot(m.state) } satisfies MWOSnapshot);
   return true;
+
+  const onClose = () => {
+    m?.subs.delete(ws);
+    ws.off("close", onClose);
+  };
+  ws.on("close", onClose);
+
+  return true;
 }
 
 export function unsubscribe(matchId: number, ws: WebSocket) {
   const m = matches.get(matchId);
   if (!m) return false;
   for (const sub of m.subs) if (sub === ws) m.subs.delete(sub);
+  return true;
 }
 
 export function onInput(matchId: number, userId: number, key: InputKeys, pressed: boolean) {
@@ -90,20 +112,29 @@ export function onInput(matchId: number, userId: number, key: InputKeys, pressed
 }
 
 export function togglePause(matchId: number, userId: number) {
-  console.log("aaaaaa");
+  console.log("Called 1");
   const m = matches.get(matchId);
   if (!m) return false;
 
-  if (!m.paused) {
-    m.paused = true;
-    m.resumeAtMs = null;
-    broadcast(m, { type: "match_paused", matchId: m.matchId } satisfies MWOPaused);
-    return;
-  }
+  const s = m.state;
+  if (s.phase === "playing") {
+    console.log("Called 2");
 
-  if (m.resumeAtMs !== null) return;
-  m.resumeAtMs = Date.now() + 3000;
-  broadcast(m, { type: "match_countdown", matchId: m.matchId, seconds: 3 } satisfies MWOCountDown);
+    s.phase = "paused";
+    s.pauseCooldownAt = null;
+    broadcastSnapshot(m);
+    return true;
+  }
+  if (s.phase === "paused") {
+    console.log("Called 3");
+
+    const pauseCooldownAt = Date.now() + 3000;
+    s.phase = "countdown";
+    s.pauseCooldownAt = pauseCooldownAt;
+    broadcastSnapshot(m);
+    return true;
+  }
+  return true;
 }
 
 /** --- Loop */
@@ -116,40 +147,39 @@ function startLoop(m: MatchRuntime) {
     const dt = Number(nowHr - m.lastHr) / 1e9;
     m.lastHr = nowHr;
 
-    if (m.paused && m.resumeAtMs !== null) {
-      const msLeft = m.resumeAtMs - Date.now();
-      if (msLeft <= 0) {
-        m.paused = false;
-        m.resumeAtMs = null;
-        broadcast(m, { type: "match_resumed", matchId: m.matchId } satisfies MWOResumed);
-      } else {
-        // optionally broadcast int countdown changes; not every tick
+    const s = m.state;
+    if (s.phase === "countdown" && s.pauseCooldownAt) {
+      if (Date.now() >= s.pauseCooldownAt) {
+        s.phase = "playing";
+        s.pauseCooldownAt = null;
+        broadcastSnapshot(m);
       }
     }
 
-    if (!m.paused) {
+    if (s.phase === "playing") {
       simAcc += dt;
       while (simAcc >= SIM_DT) {
         const scorer = step(m.state, SIM_DT);
         steps++;
 
         if (scorer) {
-          broadcast(m, { type: "match_score", matchId: m.matchId, left: m.state.leftP.score, right: m.state.rightP.score } satisfies MWOScore);
-          m.paused = true;
-          m.resumeAtMs = null;
-
           const over = m.state.leftP.score >= m.state.pointsToWin || m.state.rightP.score >= m.state.pointsToWin;
           if (over) {
-            const winner = m.state.leftP.score > m.state.rightP.score ? m.state.leftP.name : m.state.rightP.name;
-            broadcast(m, { type: "match_over", matchId: m.matchId, winner, scoreL: m.state.leftP.score, scoreR: m.state.rightP.score } satisfies MWOOver);
+            const winner = m.state.leftP.score > m.state.rightP.score ? m.state.leftP : m.state.rightP;
+            s.phase = "over";
+            s.pauseCooldownAt = null;
+            s.winner = { id: winner.id, name: winner.name };
             // Persist result (http/db) via the existing REST service
           } else {
-            // Auto-countdown or wait for host toggle
+            s.phase = "paused";
+            s.pauseCooldownAt = null;
+            s.winner = null;
           }
+          broadcastSnapshot(m);
         }
 
         if (steps % SNAPSHOT_EVERY === 0) {
-          broadcast(m, { type: "match_snapshot", matchId: m.matchId, snapshot: matchStateToSnapshot(m.state) } satisfies MWOSnapshot);
+          broadcastSnapshot(m);
         }
 
         simAcc -= SIM_DT;

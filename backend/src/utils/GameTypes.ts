@@ -1,4 +1,4 @@
-// src/helpers/GameTypes.ts
+// backend/src/utils/GameTypes.ts
 import type { WebSocket } from "ws";
 
 export type Side = "left" | "right";
@@ -106,31 +106,12 @@ export type MatchRuntime = {
   subs: Set<WebSocket>;
   raf: NodeJS.Timeout | null;
   lastHr: bigint;
-  paused: boolean; // Authority pause
-  resumeAtMs: number | null;
 };
 
 export type MatchPhase = "playing" | "paused" | "countdown" | "over";
 
 export type MatchState = {
   matchId: number;
-  paused: boolean;
-  pointsToWin: number;
-  paddleHeight: number;
-  freeMove: boolean;
-  leftP: PlayerState;
-  rightP: PlayerState;
-  ball: BallState;
-  // Timers
-  pauseCooldownAt?: number;
-};
-
-export type MatchOnlineState = {
-  matchId: number;
-
-  // Runtime meta
-  pauseCooldownAt?: number;
-  winner?: { id: number; name: string };
 
   // Settings
   pointsToWin: number;
@@ -141,14 +122,17 @@ export type MatchOnlineState = {
   leftP: PlayerState;
   rightP: PlayerState;
   ball: BallState;
-  // Timers
+
+  // Game runtime
+  phase: MatchPhase;
+  pauseCooldownAt?: number | null;
+  winner?: { id: number; name: string } | null;
 };
 
-export type BallSnapshot = {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
+export type SettingsSnapshot = {
+  pointsToWin: number;
+  paddleHeight: number;
+  freeMove: boolean;
 };
 
 export type PlayerSnapshot = {
@@ -162,23 +146,23 @@ export type PlayerSnapshot = {
   avatar_url: string | null;
 };
 
-export type SettingsSnapshot = {
-  pointsToWin: number;
-  freeMove: boolean;
-  paddleHeight: number;
+export type BallSnapshot = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
 };
 
 export type RuntimeSnapshot = {
   phase: MatchPhase;
-  countdownMs?: number;
+  pauseCooldownAt?: number | null;
   winner?: { id: number; name: string } | null;
-  serverNowMs: number;
 };
 
 export type MatchSnapshot = {
-  ball: BallSnapshot;
+  settings: SettingsSnapshot;
   leftP: PlayerSnapshot;
   rightP: PlayerSnapshot;
-  settings: SettingsSnapshot;
+  ball: BallSnapshot;
   runtime: RuntimeSnapshot;
 };

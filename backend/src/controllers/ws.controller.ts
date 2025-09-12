@@ -241,7 +241,7 @@ function handleOFLobbySetSettings(ws: WebSocket, rooms: Rooms, meId: number, msg
 function handleOFMatchCreated(ws: WebSocket, rooms: Rooms, meId: number, msg: LWIReady) {
   const res = lobbyService.setReady(msg.lobbyId, meId, msg.ready);
   if (!res) return;
-  rooms.broadcastToUsers(res.targets, res.payload);
+  for (const r of res) rooms.broadcastToUsers(r.targets, r.payload);
 }
 
 function handleOFLobbyLeave(ws: WebSocket, rooms: Rooms, meId: number, msg: LWILeave) {

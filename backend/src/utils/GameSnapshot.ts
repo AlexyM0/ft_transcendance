@@ -1,10 +1,7 @@
 // src/helpers/GameSnapshot.ts
-import type { BallSnapshot, MatchRuntime, PlayerSnapshot, SettingsSnapshot, MatchSnapshot, RuntimeSnapshot } from "./GameTypes";
+import type { BallSnapshot, MatchState, PlayerSnapshot, SettingsSnapshot, MatchSnapshot, RuntimeSnapshot } from "./GameTypes";
 
-export function matchStateToSnapshot(m: MatchRuntime): MatchSnapshot {
-  const s = m.state;
-  const isCountdown = m.paused && m.resumeAtMs !== null;
-
+export function matchStateToSnapshot(s: MatchState): MatchSnapshot {
   const ballSnapshot: BallSnapshot = {
     x: s.ball.area.x,
     y: s.ball.area.y,
@@ -40,27 +37,30 @@ export function matchStateToSnapshot(m: MatchRuntime): MatchSnapshot {
     paddleHeight: s.paddleHeight,
   };
 
-  const runtimeSnapshot : RuntimeSnapshot = {
-	phase : !m.paused ? "playing" : isCountdown ? "countdown" : "paused",
-	countdownMs: isCountdown ? Math.max(0, m.resumeAtMs! - Date.now()) : undefined,
-	winner: 
-  }
+  const runtimeSnapshot: RuntimeSnapshot = {
+    phase: s.phase,
+    pauseCooldownAt: s.pauseCooldownAt ?? null,
+    winner: s.winner ?? null,
+  };
 
   return {
     ball: ballSnapshot,
     leftP: leftPSnapshot,
     rightP: rightPSnapshot,
     settings: settingsSnapshot,
-	runtime: runtimeSnapshot,
+    runtime: runtimeSnapshot,
   } as MatchSnapshot;
 }
 
+// Only on client side
 export function applySnapshotToMatch(s: MatchState, w: MatchSnapshot) {
+  // Ball
   s.ball.area.x = w.ball.x;
   s.ball.area.y = w.ball.y;
   s.ball.velocity.vx = w.ball.vx;
   s.ball.velocity.vy = w.ball.vy;
 
+  // Left player
   s.leftP.paddle.x = w.leftP.x;
   s.leftP.paddle.y = w.leftP.y;
   s.leftP.velocity.vx = w.leftP.vx;
@@ -70,6 +70,7 @@ export function applySnapshotToMatch(s: MatchState, w: MatchSnapshot) {
   s.leftP.name = w.leftP.name;
   s.leftP.avatar_url = w.leftP.avatar_url;
 
+  // Right player
   s.rightP.paddle.x = w.rightP.x;
   s.rightP.paddle.y = w.rightP.y;
   s.rightP.velocity.vx = w.rightP.vx;
@@ -79,7 +80,13 @@ export function applySnapshotToMatch(s: MatchState, w: MatchSnapshot) {
   s.rightP.name = w.rightP.name;
   s.rightP.avatar_url = w.rightP.avatar_url;
 
+  // Settings
   s.pointsToWin = w.settings.pointsToWin;
-  s.freeMove = w.settings.freeMove;
   s.paddleHeight = w.settings.paddleHeight;
+  s.freeMove = w.settings.freeMove;
+
+  // Runtime
+  s.phase = w.runtime.phase;
+  s.pauseCooldownAt = w.runtime.pauseCooldownAt ?? null;
+  s.winner = w.runtime.winner ?? null;
 }
