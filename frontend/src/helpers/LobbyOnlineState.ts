@@ -1,11 +1,11 @@
-// src/helpers/LobbyOnlineState.ts
+// frontend/src/helpers/LobbyOnlineState.ts
 import { Realtime } from "./ws";
 import type { AllWsIncoming, LWOInviteAnswer, LWOInviteCancel, LWOInviteSend, LWOLeave, LWOReady, LWOSetSettings } from "./ws_types";
 import type { UserStatus, PublicUser, LobbySnapshot, MatchSettingsSnapshot, LobbyState } from "./state_types";
 
 const defaultSettings: MatchSettingsSnapshot = {
   pointsToWin: 3,
-  paddleSize: "medium",
+  paddleHeight: "medium",
   freeMove: false,
   hostSide: "left",
 };
@@ -118,6 +118,7 @@ function onWs(msg: AllWsIncoming) {
       if (state.outgoing?.inviteId === msg.inviteId) {
         if (msg.accepted) {
           // Keep the waiting overlay up; we expect "match_lobby" next
+          state.outgoing = null;
         } else {
           // Declined → clear outgoing so UI overlay closes
           state.outgoing = null;
@@ -130,7 +131,7 @@ function onWs(msg: AllWsIncoming) {
     case "lobby_snapshot": {
       // Lobby formed — authoritative server snapshot
       state.lobbySnapshot = {
-        matchId: msg.lobbySnapshot.matchId,
+        lobbyId: msg.lobbySnapshot.lobbyId,
         hostId: msg.lobbySnapshot.hostId,
         guestId: msg.lobbySnapshot.guestId,
         settings: msg.lobbySnapshot.settings,
@@ -145,9 +146,11 @@ function onWs(msg: AllWsIncoming) {
       break;
     }
 
-    case "lobby_ready": {
+    case "match_created": {
       if (state.lobbySnapshot) {
-        state.lobbySnapshot.ready[msg.userId] = msg.ready;
+        state.lobbySnapshot.locked = true;
+        sessionStorage.setItem(`play:online:current`, JSON.stringify({ matchId: msg.matchId, state: msg.state }));
+        location.hash = `/play/online/m`;
       }
       emit();
       break;
@@ -194,7 +197,7 @@ export const Lobbies = {
   setSettings(partial: Partial<MatchSettingsSnapshot>) {
     state.settings = { ...state.settings, ...partial };
     if (state.lobbySnapshot) {
-      realtime.send({ type: "lobby_set_settings", matchId: state.lobbySnapshot.matchId, settings: state.settings } as LWOSetSettings);
+      realtime.send({ type: "lobby_set_settings", lobbyId: state.lobbySnapshot.lobbyId, settings: state.settings } as LWOSetSettings);
     }
     emit();
   },
@@ -225,7 +228,7 @@ export const Lobbies = {
       cancelRequestedBeforeAck: false,
     };
     emit();
-    realtime.send({ type: "lobby_invite_send", to: opp.id } as LWOInviteSend);
+    realtime.send({ type: "lobby_invite_send", from: state.meId!, to: opp.id } satisfies LWOInviteSend);
   },
 
   /** Cancel invite (works even if inviteId isn’t acked yet) */
@@ -252,6 +255,7 @@ export const Lobbies = {
       emit();
     } else {
       // Accept → wait for "match_lobby"; we keep the modal open or let the view close it
+      state.activeIncoming = null;
       emit();
     }
   },
@@ -268,17 +272,17 @@ export const Lobbies = {
   /** Mark host start button ready */
   setReady(ready: boolean) {
     if (!state.lobbySnapshot || !state.meId) return;
-    const matchId = state.lobbySnapshot.matchId;
+    const lobbyId = state.lobbySnapshot.lobbyId;
 
     state.lobbySnapshot.ready[state.meId] = ready;
     emit();
-    realtime.send({ type: "lobby_ready", matchId, ready } as LWOReady);
+    realtime.send({ type: "lobby_ready", lobbyId, ready } as LWOReady);
   },
 
   leaveLobby() {
-    const m = state.lobbySnapshot?.matchId;
-    if (!m) return;
-    realtime.send({ type: "lobby_leave", matchId: m } as LWOLeave);
+    const lobbyId = state.lobbySnapshot?.lobbyId;
+    if (!lobbyId) return;
+    realtime.send({ type: "lobby_leave", lobbyId } as LWOLeave);
   },
 
   /** Read helpers for the view */

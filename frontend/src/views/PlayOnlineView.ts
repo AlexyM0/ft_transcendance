@@ -1,10 +1,10 @@
-// src/views/PlayLocalView.ts
-import * as http from "../api/http";
+// frontend/src/views/PlayOnlineView.ts
 import { Lobbies, subscribe as subscribeToLobbies } from "../helpers/LobbyOnlineState";
 import { Avatar } from "../ui/Avatar";
 import { domElem as h } from "../ui/DomElement";
 import { fetchMyProfile } from "./ProfileView";
 import type { UserRow, MatchRow, Points, PaddleSizeKey, Side, Settings, LobbyState } from "../helpers/state_types";
+import * as apiFriends from "../api/friends";
 
 /* ======================================================================= */
 /* Utilities                                                               */
@@ -17,7 +17,7 @@ function createDefaultSettings(me: UserRow, opponent?: UserRow) {
     me,
     opponent: opponent ?? null,
     pointsToWin: 3,
-    paddleSize: "medium",
+    paddleHeight: "medium",
     mySide: "left",
     freeMove: false,
     matchId: null,
@@ -119,7 +119,7 @@ function makePlayerRow(user: UserRow | null, ready: boolean, label: string) {
   return { row, name, badge };
 }
 
-function buildLeftSelector(state: Settings, setSideOptionNames: (state: Settings) => void, canInvite: () => void) {
+function buildLeftSelector(state: Settings, setSideOptionNames: (state: Settings) => void) {
   const leftWrap = h("div", { class: "flex flex-col gap-3 p-6" });
   const leftHeader = h("div", { class: "text-lg font-semibold text-emerald-900", text: "Choose opponent" });
   const searchBar = h("input", {
@@ -129,7 +129,8 @@ function buildLeftSelector(state: Settings, setSideOptionNames: (state: Settings
   const resultsWrap = h("div", { class: "max-h-130 overflow-auto space-y-1" });
 
   async function loadUsers() {
-    const users: UserRow[] = (await http.getRequest<UserRow[]>("/api/users/all")).filter((u) => u.id !== state.me.id);
+    const friends = await apiFriends.getFriends();
+    const users: UserRow[] = friends.map(({ id, pseudo, avatar_url }) => ({ id, pseudo, avatar_url }));
     users.forEach((u) => usersById.set(u.id, u));
 
     function userAsButton(u: UserRow) {
@@ -149,7 +150,6 @@ function buildLeftSelector(state: Settings, setSideOptionNames: (state: Settings
           Lobbies.selectOpponent(u);
           renderResults(users);
           setSideOptionNames(state);
-          canInvite();
         });
       }
       return btn;
@@ -166,8 +166,6 @@ function buildLeftSelector(state: Settings, setSideOptionNames: (state: Settings
 
       const list = q ? base.filter((x) => x.pseudo.toLowerCase().includes(q) && x.id != state.me.id) : base;
       list.forEach((u) => resultsWrap.append(userAsButton(u)));
-
-      canInvite();
     }
 
     searchBar.addEventListener("input", () => renderResults(users));
@@ -228,9 +226,9 @@ function buildRightSettingsPanel(state: Settings) {
   const pointsSelector = h("div", { class: "flex flex-wrap gap-2" });
   const pointBtns: HTMLButtonElement[] = [];
 
-  function selectPoints(p: Points) {
+  function selectPoints(p: Points, silent = false) {
     state.pointsToWin = p;
-    Lobbies.setSettings({ pointsToWin: p });
+    if (!silent) Lobbies.setSettings({ pointsToWin: p });
     pointBtns.forEach((b) => (b.className = b.className.replace(/bg-emerald-700.*|border-emerald-600/g, "border-slate-200")));
     const idx = [3, 5, 7, 9].indexOf(p);
     if (idx >= 0) pointBtns[idx].className = "px-3 py-2 rounded-xl border bg-emerald-700 text-white border-emerald-600";
@@ -258,9 +256,9 @@ function buildRightSettingsPanel(state: Settings) {
   const paddleSizeSelector = h("div", { class: "flex flex-wrap gap-10" });
   const paddleSizeBtns: HTMLButtonElement[] = [];
 
-  function selectPaddleSize(s: PaddleSizeKey) {
-    state.paddleSize = s;
-    Lobbies.setSettings({ paddleSize: s });
+  function selectPaddleSize(s: PaddleSizeKey, silent = false) {
+    state.paddleHeight = s;
+    if (!silent) Lobbies.setSettings({ paddleHeight: s });
     paddleSizeSelector.querySelectorAll("button").forEach((x) => x.classList.remove("ring-2", "ring-emerald-300"));
     const map: Record<PaddleSizeKey, number> = { small: 0, medium: 1, large: 2 };
     paddleSizeBtns[map[s]].classList.add("ring-2", "ring-emerald-300");
@@ -278,7 +276,7 @@ function buildRightSettingsPanel(state: Settings) {
     btn.addEventListener("click", () => {
       selectPaddleSize(s);
     });
-    if (s === state.paddleSize) btn.classList.add("ring-2", "ring-emerald-300");
+    if (s === state.paddleHeight) btn.classList.add("ring-2", "ring-emerald-300");
     paddleSizeBtns.push(btn);
     paddleSizeSelector.append(btn);
   }
@@ -300,11 +298,6 @@ function buildRightSettingsPanel(state: Settings) {
   settingsWrap.append(paddleSizeWrap);
 
   /** -- Side selector */
-
-  /**
-   *  Function to be called by left panel on selecting a player
-   */
-
   const sidesWrap = h("div", { class: "w-full flex flex-col items-center gap-3" });
   const sidesHeader = h("div", { class: "text-sm font-semibold text-slate-600", text: "Side" });
   const sides = h("div", { class: "w-full flex flex-row items-center justify-around" });
@@ -358,13 +351,43 @@ function buildRightSettingsPanel(state: Settings) {
   /** -- Mount with right panel */
   rightWrap.append(rightHeader, settingsWrap, separator, wrapBtn);
 
-  /** External control points for the view/subscriber */
-  function setInviteAsCancel(isCancel: boolean) {
-    inviteBtn.textContent = isCancel ? "Cancel Lobby" : "Invite player";
-    inviteBtn.className =
-      "mt-1 inline-flex items-center justify-center px-4 py-3 rounded-xl " +
-      (isCancel ? "bg-red-600 hover:bg-red-500" : "bg-indigo-600 hover:bg-indigo-500") +
-      " text-white disabled:opacity-40 shadow";
+  /** -- Enabled/Disable controls - host can edit in-lobby, guest is read-only */
+  function setSettingsEnabled(enabled: boolean) {
+    for (const b of pointBtns) b.toggleAttribute("disabled", !enabled);
+    for (const b of paddleSizeBtns) b.toggleAttribute("disabled", !enabled);
+    sideBtn.toggleAttribute("disabled", !enabled);
+    freeCheckBox.toggleAttribute("disabled", !enabled);
+  }
+
+  function setInviteMode(mode: "invite" | "cancelInvite" | "cancelLobby" | "disabled") {
+    const baseClasses = "mt-1 inline-flex items-center justify-center px-4 py-3 rounded-xl text-white disabled:opacity-40 shadow ";
+    let updatedClasses = "";
+    let label = "Invite player";
+
+    switch (mode) {
+      case "invite":
+        updatedClasses = "bg-indigo-600 hover:bg-indigo-500";
+        label = "Invite player";
+        inviteBtn.disabled = false;
+        break;
+      case "cancelInvite":
+        updatedClasses = "bg-red-600 hover:bg-red-500";
+        label = "Cancel Invite";
+        inviteBtn.disabled = false;
+        break;
+      case "cancelLobby":
+        updatedClasses = "bg-red-600 hover:bg-red-500";
+        label = "Cancel Lobby";
+        inviteBtn.disabled = false;
+        break;
+      case "disabled":
+        updatedClasses = "bg-indigo-600";
+        label = "Invite player";
+        inviteBtn.disabled = true;
+        break;
+    }
+    inviteBtn.className = baseClasses + updatedClasses;
+    inviteBtn.textContent = label;
   }
 
   function reflectSettingsFromSnapshot(s: LobbyState) {
@@ -372,18 +395,18 @@ function buildRightSettingsPanel(state: Settings) {
     if (!lobbySnapshot) return;
 
     state.pointsToWin = lobbySnapshot.settings.pointsToWin as Points;
-    state.paddleSize = lobbySnapshot.settings.paddleSize as PaddleSizeKey;
+    state.paddleHeight = lobbySnapshot.settings.paddleHeight as PaddleSizeKey;
     state.freeMove = !!lobbySnapshot.settings.freeMove;
 
     state.mySide = lobbySnapshot.settings.hostSide as Side;
 
-    selectPoints(state.pointsToWin);
-    selectPaddleSize(state.paddleSize);
+    selectPoints(state.pointsToWin, true);
+    selectPaddleSize(state.paddleHeight, true);
     freeCheckBox.checked = state.freeMove;
     updateSideLabels();
   }
 
-  return { rightWrap, inviteBtn, startBtn, setInviteAsCancel, reflectSettingsFromSnapshot, updateSideLabels };
+  return { rightWrap, inviteBtn, startBtn, reflectSettingsFromSnapshot, updateSideLabels, setSettingsEnabled, setInviteMode };
 }
 
 /* ======================================================================= */
@@ -417,7 +440,7 @@ export async function PlayOnlineView(root: HTMLElement) {
   const rightPanel = buildRightSettingsPanel(localSettings);
 
   const leftPanel = h("div", { class: "contents" });
-  const leftSelector = buildLeftSelector(localSettings, rightPanel.updateSideLabels, () => {});
+  const leftSelector = buildLeftSelector(localSettings, rightPanel.updateSideLabels);
   const leftLobbyBlock = buildLeftLobbyBlock();
   leftLobbyBlock.leftLobbyWrap.classList.add("hidden");
   leftPanel.append(leftSelector, leftLobbyBlock.leftLobbyWrap);
@@ -432,9 +455,8 @@ export async function PlayOnlineView(root: HTMLElement) {
   backBtn.append(backIcon, backText);
   backBtn.addEventListener("click", () => {
     const s = Lobbies.getState();
-    if (s.lobbySnapshot) {
-      Lobbies.leaveLobby();
-    }
+    if (s.outgoing?.inviteId != null) Lobbies.cancelInvite();
+    if (s.lobbySnapshot) Lobbies.leaveLobby();
     location.hash = `/play`;
   });
 
@@ -442,59 +464,75 @@ export async function PlayOnlineView(root: HTMLElement) {
   viewWrap.append(panel, backBtn);
   root.append(viewWrap);
 
-  /** Wire invite/start buttons */
-  rightPanel.inviteBtn.addEventListener("click", (e) => {
-    e.preventDefault();
-    const s = Lobbies.getState();
-    if (s.lobbySnapshot) {
-      Lobbies.leaveLobby();
-      return;
-    }
-    if (!Lobbies.canInviteSelected()) return;
+  /** -- Navigate on start - once lobby becomes locked, move both players to the game view */
+  let movedToMatch = false;
+  function maybeGoToMatch() {
+    if (movedToMatch) return;
+    movedToMatch = true;
 
-    Lobbies.setSettings({
-      pointsToWin: localSettings.pointsToWin,
-      paddleSize: localSettings.paddleSize,
-      freeMove: localSettings.freeMove,
-      hostSide: localSettings.mySide,
-    });
+    location.hash = "/play/online/m";
+  }
 
-    Lobbies.inviteSelected();
-  });
-
-  rightPanel.startBtn.addEventListener("click", (e) => {
-    e.preventDefault();
-    const s = Lobbies.getState();
-
-    if (!s.lobbySnapshot) return;
-
-    const iAmHost = s.lobbySnapshot!.hostId === me.id;
-    if (!iAmHost) return;
-
-    Lobbies.setReady(true);
-  });
-
-  /** Subscription - wire all states */
+  /** Subscription - wire all states with LobbyOnlineState */
   const stop = subscribeToLobbies((s) => {
     if (s.lobbySnapshot) {
       leftSelector.classList.add("hidden");
       leftLobbyBlock.leftLobbyWrap.classList.remove("hidden");
       leftLobbyBlock.updateFromState(s, localSettings.me, localSettings.opponent ?? null);
 
-      rightPanel.setInviteAsCancel(true);
-
       const iAmHost = s.lobbySnapshot.hostId === s.meId;
-      rightPanel.startBtn.toggleAttribute("disabled", !iAmHost);
+      rightPanel.setSettingsEnabled(iAmHost);
       rightPanel.reflectSettingsFromSnapshot(s);
+      rightPanel.startBtn.toggleAttribute("disabled", !iAmHost);
+      rightPanel.startBtn.onclick = iAmHost
+        ? (e) => {
+            e.preventDefault();
+            Lobbies.setReady(true);
+          }
+        : null;
+
+      if (s.lobbySnapshot.locked) {
+        maybeGoToMatch();
+      }
     } else {
       leftLobbyBlock.leftLobbyWrap.classList.add("hidden");
       leftSelector.classList.remove("hidden");
 
-      rightPanel.setInviteAsCancel(false);
       rightPanel.startBtn.toggleAttribute("disabled", true);
+      rightPanel.startBtn.onclick = null;
+      rightPanel.setSettingsEnabled(true);
     }
 
-    rightPanel.inviteBtn.toggleAttribute("disabled", !Lobbies.canInviteSelected());
+    // Handle 'invite player' button
+    let mode: "invite" | "cancelInvite" | "cancelLobby" | "disabled";
+    if (s.lobbySnapshot) mode = "cancelLobby";
+    else if (s.outgoing || s.activeIncoming) mode = "cancelInvite";
+    else if (Lobbies.canInviteSelected()) mode = "invite";
+    else mode = "disabled";
+    rightPanel.setInviteMode(mode);
+
+    rightPanel.inviteBtn.onclick = (e) => {
+      e.preventDefault();
+      switch (mode) {
+        case "invite":
+          Lobbies.setSettings({
+            pointsToWin: localSettings.pointsToWin,
+            paddleHeight: localSettings.paddleHeight,
+            freeMove: localSettings.freeMove,
+            hostSide: localSettings.mySide,
+          });
+          Lobbies.inviteSelected();
+          break;
+        case "cancelInvite":
+          Lobbies.cancelInvite();
+          break;
+        case "cancelLobby":
+          Lobbies.leaveLobby();
+          break;
+        case "disabled":
+          break;
+      }
+    };
 
     if (s.outgoing) {
       const toId = s.outgoing.to;

@@ -1,4 +1,6 @@
 // src/helpers/GameTypes.ts
+import type { WebSocket } from "ws";
+
 export type Side = "left" | "right";
 export type Points = 3 | 5 | 7 | 9;
 export type PaddleSizeKey = "small" | "medium" | "large";
@@ -47,6 +49,11 @@ export type Inputs = {
 
 export type InputKeys = "up" | "down" | "left" | "right";
 
+export type PlayerLight = {
+  userId: number;
+  side: Side;
+};
+
 export type PlayerState = {
   id: number;
   name: string;
@@ -92,6 +99,17 @@ export type MatchSettings = {
   hostSide: Side;
 };
 
+export type MatchRuntime = {
+  matchId: number;
+  state: MatchState;
+  players: { left: PlayerLight; right: PlayerLight };
+  subs: Set<WebSocket>;
+  raf: NodeJS.Timeout | null;
+  lastHr: bigint;
+  paused: boolean; // Authority pause
+  resumeAtMs: number | null;
+};
+
 export type MatchPhase = "playing" | "paused" | "countdown" | "over";
 
 export type MatchState = {
@@ -105,6 +123,25 @@ export type MatchState = {
   ball: BallState;
   // Timers
   pauseCooldownAt?: number;
+};
+
+export type MatchOnlineState = {
+  matchId: number;
+
+  // Runtime meta
+  pauseCooldownAt?: number;
+  winner?: { id: number; name: string };
+
+  // Settings
+  pointsToWin: number;
+  paddleHeight: number;
+  freeMove: boolean;
+
+  // Players and ball
+  leftP: PlayerState;
+  rightP: PlayerState;
+  ball: BallState;
+  // Timers
 };
 
 export type BallSnapshot = {
@@ -143,4 +180,5 @@ export type MatchSnapshot = {
   leftP: PlayerSnapshot;
   rightP: PlayerSnapshot;
   settings: SettingsSnapshot;
+  runtime: RuntimeSnapshot;
 };

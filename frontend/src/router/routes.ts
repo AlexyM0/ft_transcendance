@@ -10,6 +10,7 @@ import { PlayOnlineView } from "../views/PlayOnlineView";
 import { ChatsView } from "../views/ChatsView";
 import { TournamentsView } from "../views/TournamentsView";
 import { MatchLocalView } from "../views/MatchLocalView";
+import { MatchOnlineView } from "../views/MatchOnlineView";
 
 export type Route = {
   path: string;
@@ -25,6 +26,7 @@ export const Routes: Route[] = [
   { path: "/play/local", view: AppShell(PlayLocalView), auth: true },
   { path: "/play/local/m", view: AppShell(MatchLocalView), auth: true },
   { path: "/play/online", view: AppShell(PlayOnlineView), auth: true },
+  { path: "/play/online/m", view: AppShell(MatchOnlineView), auth: true },
 
   { path: "/profile", view: AppShell(ProfileView), auth: true },
   { path: "/users/:pseudo", view: AppShell(ProfileView), auth: true },

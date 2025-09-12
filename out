@@ -1,380 +1,1433 @@
-// ws_auth.ts
+// src/helpers/GameConstants.ts
+export const WORLD_W = 2000;
+export const WORLD_H = (WORLD_W * 9) / 16;
+export const PADDLE_WIDTH = 12;
+export const PADDLE_HEIGHTS = { small: 100, medium: 150, large: 200 } as const;
+// src/helpers/GameLocalDriver.ts
+import { step } from "./GamePhysics";
+import type { InputKeys, MatchState, Side } from "./GameTypes";
+import { GameRenderer } from "./GameRenderer";
+
+export function GameLocalDriver(
+  renderer: GameRenderer,
+  state: MatchState,
+  options?: {
+    onScore?: (leftScore: number, rightScore: number) => void;
+    onOver?: (leftScore: number, rightScore: number) => void;
+  }
+) {
+  let last = performance.now();
+  let raf = 0;
+
+  let resumeAt: number | null = null;
+
+  function tick(t: number) {
+    const deltaTime = (t - last) / 1000;
+    last = t;
+
+    if (state.paused && resumeAt !== null) {
+      const msLeft = resumeAt - t;
+      const secLeft = Math.ceil(msLeft / 1000);
+      renderer.setCountdown(msLeft > 0 ? Math.max(0, secLeft) : null);
+
+      if (msLeft <= 0) {
+        state.paused = false;
+        resumeAt = null;
+        renderer.setPaused(false);
+        renderer.setCountdown(null);
+      }
+    }
+
+    if (!state.paused) {
+      let remaining = deltaTime;
+      let sub = 1 / 240;
+      while (remaining > 0) {
+        const s = Math.min(sub, remaining);
+        const scorer = step(state, s);
+        if (scorer) {
+          options?.onScore?.(state.leftP.score, state.rightP.score);
+          state.paused = true;
+          resumeAt = null;
+          renderer.setPaused(true);
+          renderer.setCountdown(null);
+          if (state.leftP.score >= state.pointsToWin || state.rightP.score >= state.pointsToWin) {
+            const winner = state.leftP.score > state.rightP.score ? state.leftP : state.rightP;
+            renderer.setOver(winner.name);
+            options?.onOver?.(state.leftP.score, state.rightP.score);
+          }
+          break;
+        }
+        remaining -= s;
+      }
+    }
+    renderer.draw(state);
+    raf = requestAnimationFrame(tick);
+  }
+
+  function start() {
+    raf = requestAnimationFrame(tick);
+  }
+
+  function stop() {
+    cancelAnimationFrame(raf);
+  }
+
+  function input(side: Side, key: InputKeys, pressed: boolean) {
+    const p = side === "left" ? state.leftP : state.rightP;
+    p.inputs[key] = pressed;
+  }
+
+  function togglePause() {
+    if (state.leftP.score >= state.pointsToWin || state.rightP.score >= state.pointsToWin) return;
+
+    const now = performance.now();
+
+    if (!state.paused) {
+      state.paused = true;
+      resumeAt = null;
+      renderer.setPaused(true);
+      renderer.setCountdown(null);
+      return;
+    }
+
+    if (resumeAt !== null) {
+      return;
+    }
+
+    resumeAt = now + 3000;
+    renderer.setPaused(true);
+    renderer.setCountdown(3);
+  }
+
+  return { start, stop, input, togglePause };
+}
+// src/helpers/GameLocalState.ts
+import { WORLD_W, WORLD_H, PADDLE_WIDTH, PADDLE_HEIGHTS } from "./GameConstants";
+import type { MatchSettings, MatchState, PlayerState, BallState, Side } from "./GameTypes";
+
+export function createGameLocalState(
+  matchId: number,
+  me: { id: number; name: string; avatar_url: string | null },
+  opp: { id: number; name: string; avatar_url: string | null },
+  mySide: Side,
+  settings: MatchSettings
+): MatchState {
+  const paddleHeight = PADDLE_HEIGHTS[settings.paddleHeight];
+  const margin = 18;
+  const midY = (WORLD_H - paddleHeight) / 2;
+  const half = WORLD_W / 2;
+  const marginFreeMove = 10;
+
+  const leftIsMe = mySide === "left";
+  const leftP: PlayerState = {
+    id: leftIsMe ? me.id : opp.id,
+    name: leftIsMe ? me.name : opp.name,
+    avatar_url: leftIsMe ? me.avatar_url : opp.avatar_url,
+    side: "left" as const,
+    paddle: {
+      x: margin,
+      y: midY,
+      width: PADDLE_WIDTH,
+      height: paddleHeight,
+    },
+    velocity: {
+      vx: 0,
+      vy: 0,
+    },
+    score: 0,
+    inputs: {
+      up: false,
+      down: false,
+      left: false,
+      right: false,
+    },
+    leftBound: marginFreeMove,
+    rightBound: half - marginFreeMove - PADDLE_WIDTH,
+    color: "#e2f7e1",
+  };
+
+  const rightP: PlayerState = {
+    id: leftIsMe ? opp.id : me.id,
+    name: leftIsMe ? opp.name : me.name,
+    avatar_url: leftIsMe ? opp.avatar_url : me.avatar_url,
+    side: "right" as const,
+    paddle: {
+      x: WORLD_W - margin - PADDLE_WIDTH,
+      y: midY,
+      width: PADDLE_WIDTH,
+      height: paddleHeight,
+    },
+    velocity: {
+      vx: 0,
+      vy: 0,
+    },
+    score: 0,
+    inputs: {
+      up: false,
+      down: false,
+      left: false,
+      right: false,
+    },
+    leftBound: half + marginFreeMove,
+    rightBound: WORLD_W - marginFreeMove - PADDLE_WIDTH,
+    color: "#fde2e2",
+  };
+
+  const ball: BallState = {
+    area: {
+      x: WORLD_W / 2,
+      y: WORLD_H / 2,
+      radius: 40,
+    },
+    velocity: {
+      vx: (Math.random() > 0.5 ? 1 : -1) * 500,
+      vy: (Math.random() > 0.5 ? 1 : -1) * 320,
+    },
+    lastHit: null,
+    sinceLastHitMs: 1e9,
+    samePaddleCooldownMs: 1000,
+    acceleration: 1.03,
+  };
+
+  const matchState: MatchState = {
+    matchId: matchId,
+    paused: true,
+    pointsToWin: settings.pointsToWin,
+    freeMove: settings.freeMove,
+    paddleHeight: paddleHeight,
+    leftP,
+    rightP,
+    ball,
+  };
+
+  return matchState;
+}
+// src/helpers/GamePhysics.ts
+import { WORLD_W, WORLD_H } from "./GameConstants";
+import type { Rect, Circle, Velocity, PlayerState, MatchState } from "./GameTypes";
+
+function clamp(n: number, floor: number, ceiling: number) {
+  return Math.max(floor, Math.min(ceiling, n));
+}
+
+function circleRectHit(circle: Circle, rect: Rect) {
+  const qx = clamp(circle.x, rect.x, rect.x + rect.width);
+  const qy = clamp(circle.y, rect.y, rect.y + rect.height);
+  let dx = circle.x - qx;
+  let dy = circle.y - qy;
+  const dist2 = dx * dx + dy * dy;
+  if (dist2 <= circle.radius * circle.radius) {
+    if (dx === 0 && dy === 0) {
+      const left = Math.abs(circle.x - circle.radius - rect.x);
+      const right = Math.abs(rect.x + rect.width - (circle.x + circle.radius));
+      const top = Math.abs(circle.y - circle.radius - rect.y);
+      const bottom = Math.abs(rect.y + rect.height - (circle.y + circle.radius));
+      const m = Math.min(left, right, top, bottom);
+
+      if (m === left) return { hit: true, nx: -1, ny: 0, pen: left };
+      if (m === right) return { hit: true, nx: 1, ny: 0, pen: right };
+      if (m === top) return { hit: true, nx: 0, ny: -1, pen: top };
+      return { hit: true, nx: 0, ny: 1, pen: bottom };
+    }
+    const dist = Math.sqrt(dist2);
+    return { hit: true, nx: dx / dist, ny: dy / dist, pen: circle.radius - dist };
+  }
+  return { hit: false };
+}
+
+function resolveCollision(ball: MatchState["ball"], paddle: Rect, paddleV: Velocity) {
+  const hit: any = circleRectHit(ball.area, paddle);
+  if (!hit.hit) return false;
+
+  ball.area.x += hit.nx * hit.pen;
+  ball.area.y += hit.ny * hit.pen;
+
+  const vdotn = ball.velocity.vx * hit.nx + ball.velocity.vy * hit.ny;
+  ball.velocity.vx = ball.velocity.vx - (1 + 0.9) * vdotn * hit.nx;
+  ball.velocity.vy = ball.velocity.vy - (1 + 0.9) * vdotn * hit.ny;
+
+  ball.velocity.vx += (paddleV.vx ?? 0) * 0.25;
+  ball.velocity.vy += (paddleV.vy ?? 0) * 0.25;
+  ball.velocity.vx *= 1.03;
+  ball.velocity.vy *= 1.03;
+  return true;
+}
+
+function applyInputs(player: PlayerState, deltaTime: number, freeMove: boolean) {
+  const velocity = 800;
+  const ox = player.paddle.x;
+  const oy = player.paddle.y;
+  if (player.inputs.up) player.paddle.y -= velocity * deltaTime;
+  if (player.inputs.down) player.paddle.y += velocity * deltaTime;
+  if (freeMove) {
+    if (player.inputs.left) player.paddle.x -= velocity * deltaTime;
+    if (player.inputs.right) player.paddle.x += velocity * deltaTime;
+    player.paddle.x = clamp(player.paddle.x, player.leftBound, player.rightBound);
+  }
+  player.paddle.y = clamp(player.paddle.y, 0, WORLD_H - player.paddle.height);
+  player.velocity.vx = (player.paddle.x - ox) / deltaTime;
+  player.velocity.vy = (player.paddle.y - oy) / deltaTime;
+}
+
+export function step(s: MatchState, deltaTime: number) {
+  const { leftP, rightP, ball } = s;
+
+  applyInputs(leftP, deltaTime, s.freeMove);
+  applyInputs(rightP, deltaTime, s.freeMove);
+
+  ball.area.x += ball.velocity.vx * deltaTime;
+  ball.area.y += ball.velocity.vy * deltaTime;
+  ball.sinceLastHitMs += deltaTime * 1000;
+
+  // Walls collision
+  if (ball.area.y - ball.area.radius < 0) {
+    ball.area.y = ball.area.radius;
+    ball.velocity.vy *= -1;
+  }
+  if (ball.area.y + ball.area.radius > WORLD_H) {
+    ball.area.y = WORLD_H - ball.area.radius;
+    ball.velocity.vy *= -1;
+  }
+
+  // Paddles collision
+  let hit = false;
+  if (ball.lastHit !== "L" || ball.sinceLastHitMs >= ball.samePaddleCooldownMs) {
+    if (resolveCollision(ball, leftP.paddle, leftP.velocity)) {
+      ball.lastHit = "L";
+      ball.sinceLastHitMs = 0;
+      hit = true;
+    }
+  }
+  if (!hit && (ball.lastHit !== "R" || ball.sinceLastHitMs >= ball.samePaddleCooldownMs)) {
+    if (resolveCollision(ball, rightP.paddle, rightP.velocity)) {
+      ball.lastHit = "R";
+      ball.sinceLastHitMs = 0;
+      hit = true;
+    }
+  }
+
+  // Scoring
+  let scorer: 1 | 2 | null = null;
+  if (ball.area.x < 0) scorer = 2;
+  if (ball.area.x > WORLD_W) scorer = 1;
+  if (scorer) {
+    (scorer === 1 ? leftP : rightP).score++;
+    ball.area.x = WORLD_W / 2;
+    ball.area.y = WORLD_H / 2;
+    ball.velocity.vx = (Math.random() > 0.5 ? 1 : -1) * 500;
+    ball.velocity.vy = (Math.random() > 0.5 ? 1 : -1) * 320;
+    ball.lastHit = null;
+    ball.sinceLastHitMs = 1e9;
+
+    // Pause between points is handled by lobby/UI via countdown. We keep sim running
+  }
+  return scorer;
+}
+// src/helpers/GameRenderer.ts
+import { WORLD_W, WORLD_H } from "./GameConstants";
+import type { MatchState, BallSprite } from "./GameTypes";
+
+export class GameRenderer {
+  private dpr = window.devicePixelRatio || 1;
+  private scale = 1;
+  private ctx: CanvasRenderingContext2D;
+  private resizeObs!: ResizeObserver;
+  private ballSprite: BallSprite = {
+    img: null,
+    ready: false,
+    angle: 0,
+    spinPerSec: 1,
+  };
+  private lastDrawMs: number | null = null;
+
+  countdown: number | null = null;
+  paused = true;
+  over = false;
+  winnerName: string | null = null;
+
+  constructor(private wrap: HTMLElement, private canvas: HTMLCanvasElement, private header: HTMLElement) {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("2D context failed");
+    this.ctx = ctx;
+    this.installResize();
+  }
+
+  setBallSprite(url: string) {
+    const img = new Image();
+    img.onload = () => {
+      this.ballSprite.img = img;
+      this.ballSprite.ready = true;
+      this.ballSprite.angle = 0;
+    };
+    img.crossOrigin = "anonymous";
+    img.src = url;
+  }
+
+  dispose() {
+    this.resizeObs?.disconnect();
+  }
+
+  setCountdown(n: number | null) {
+    this.countdown = n;
+  }
+
+  setPaused(p: boolean) {
+    this.paused = p;
+  }
+
+  setOver(name: string | null) {
+    this.over = !!name;
+    this.winnerName = name;
+  }
+
+  draw(s: MatchState) {
+    const now = performance.now();
+    if (this.lastDrawMs === null) this.lastDrawMs = now;
+    const deltaTime = (now - this.lastDrawMs) / 1000;
+    this.lastDrawMs = now;
+
+    const ctx = this.ctx;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    ctx.setTransform(this.scale * this.dpr, 0, 0, this.scale * this.dpr, 0, 0);
+
+    // Field - background
+    const g = ctx.createLinearGradient(0, 0, 0, WORLD_H);
+    g.addColorStop(0, "#162322");
+    g.addColorStop(1, "#2e736c");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+
+    // Field - rectangle
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(2, 2, WORLD_W - 4, WORLD_H - 4);
+    ctx.save();
+
+    // Field - middle line
+    ctx.setLineDash([10, 10]);
+    ctx.beginPath();
+    ctx.moveTo(WORLD_W / 2, 10);
+    ctx.lineTo(WORLD_W / 2, WORLD_H - 10);
+    ctx.stroke();
+    ctx.restore();
+
+    // Field - center circle
+    ctx.beginPath();
+    ctx.arc(WORLD_W / 2, WORLD_H / 2, Math.min(WORLD_W, WORLD_H) * 0.1, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Paddles
+    ctx.fillStyle = s.leftP.color ?? "#e2f7e1";
+    ctx.fillRect(s.leftP.paddle.x, s.leftP.paddle.y, s.leftP.paddle.width, s.leftP.paddle.height);
+    ctx.fillStyle = s.rightP.color ?? "#fde2e2";
+    ctx.fillRect(s.rightP.paddle.x, s.rightP.paddle.y, s.rightP.paddle.width, s.rightP.paddle.height);
+
+    // Ball
+    const { x, y, radius } = s.ball.area;
+    if (this.ballSprite.ready && this.ballSprite.img) {
+      this.ballSprite.angle += Math.PI * 2 * this.ballSprite.spinPerSec * deltaTime;
+      ctx.save();
+      ctx.translate(x, y);
+      if (!this.paused) {
+        ctx.rotate(this.ballSprite.angle);
+      }
+
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.clip();
+
+      ctx.drawImage(this.ballSprite.img, -radius, -radius, 2 * radius, 2 * radius);
+      ctx.restore();
+
+      ctx.beginPath();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "white";
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = "white";
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Overlay
+    if (this.paused || this.countdown || this.over) {
+      const msg = this.countdown ? String(this.countdown) : this.over ? `Winner: ${this.winnerName ?? ""}` : "Paused";
+
+      const { width: pxW, height: pxH } = this.canvas;
+
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+      const fontPx = Math.max(32, Math.floor(pxH * 0.16));
+      ctx.font = `${fontPx}px system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      // Backdrop on the game canvas when paused
+      ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+      ctx.fillRect(0, 0, pxW, pxH);
+
+      // Subtle stroke + fill so it pops
+      ctx.lineWidth = Math.max(2, Math.floor(fontPx * 0.06));
+      ctx.strokeStyle = "rgba(0,0,0,0.6)";
+      ctx.fillStyle = "white";
+      const cx = pxW / 2,
+        cy = Math.floor(pxH * 0.25);
+      ctx.strokeText(msg, cx, cy);
+      ctx.fillText(msg, cx, cy);
+
+      ctx.restore();
+    }
+  }
+
+  private installResize() {
+    const fit = () => {
+      const availW = this.wrap.clientWidth;
+      const availH = this.wrap.clientHeight - this.header.clientHeight - 12;
+      const scale = Math.min(availW / WORLD_W, availH / WORLD_H);
+      this.scale = Math.max(scale, 0.5);
+
+      const cssW = Math.floor(WORLD_W * this.scale);
+      const cssH = Math.floor(WORLD_H * this.scale);
+      this.canvas.style.width = cssW + "px";
+      this.canvas.style.height = cssH + "px";
+
+      const pxW = Math.floor(cssW * this.dpr);
+      const pxH = Math.floor(cssH * this.dpr);
+      if (this.canvas.width !== pxW || this.canvas.height !== pxH) {
+        this.canvas.width = pxW;
+        this.canvas.height = pxH;
+      }
+    };
+    fit();
+    this.resizeObs = new ResizeObserver(fit);
+    this.resizeObs.observe(this.wrap);
+  }
+}
+// src/helpers/GameSnapshot.ts
+import type { BallSnapshot, MatchState, PlayerSnapshot, SettingsSnapshot, SnapshotWire } from "./GameTypes";
+
+export function MatchStateToSnapshot(s: MatchState): SnapshotWire {
+  const ballSnapshot: BallSnapshot = {
+    x: s.ball.area.x,
+    y: s.ball.area.y,
+    vx: s.ball.velocity.vx,
+    vy: s.ball.velocity.vy,
+  };
+
+  const leftPSnapshot: PlayerSnapshot = {
+    x: s.leftP.paddle.x,
+    y: s.leftP.paddle.y,
+    vx: s.leftP.velocity.vx,
+    vy: s.leftP.velocity.vy,
+    score: s.leftP.score,
+    id: s.leftP.id,
+    name: s.leftP.name,
+  };
+
+  const rightPSnapshot: PlayerSnapshot = {
+    x: s.rightP.paddle.x,
+    y: s.rightP.paddle.y,
+    vx: s.rightP.velocity.vx,
+    vy: s.rightP.velocity.vy,
+    score: s.rightP.score,
+    id: s.rightP.id,
+    name: s.rightP.name,
+  };
+
+  const settingsSnapshot: SettingsSnapshot = {
+    pointsToWin: s.pointsToWin,
+    freeMove: s.freeMove,
+    paddleHeight: s.paddleHeight,
+  };
+
+  return {
+    ball: ballSnapshot,
+    leftP: leftPSnapshot,
+    rightP: rightPSnapshot,
+    settings: settingsSnapshot,
+  } as SnapshotWire;
+}
+
+export function ApplySnapshotToMatch(s: MatchState, w: SnapshotWire) {
+  s.ball.area.x = w.ball.x;
+  s.ball.area.y = w.ball.y;
+  s.ball.velocity.vx = w.ball.vx;
+  s.ball.velocity.vy = w.ball.vy;
+
+  s.leftP.paddle.x = w.leftP.x;
+  s.leftP.paddle.y = w.leftP.y;
+  s.leftP.velocity.vx = w.leftP.vx;
+  s.leftP.velocity.vy = w.leftP.vy;
+  s.leftP.score = w.leftP.score;
+  s.leftP.id = w.leftP.id;
+  s.leftP.name = w.leftP.name;
+
+  s.rightP.paddle.x = w.rightP.x;
+  s.rightP.paddle.y = w.rightP.y;
+  s.rightP.velocity.vx = w.rightP.vx;
+  s.rightP.velocity.vy = w.rightP.vy;
+  s.rightP.score = w.rightP.score;
+  s.rightP.id = w.rightP.id;
+  s.rightP.name = w.rightP.name;
+
+  s.pointsToWin = w.settings.pointsToWin;
+  s.freeMove = w.settings.freeMove;
+  s.paddleHeight = w.settings.paddleHeight;
+}
+// src/helpers/GameTypes.ts
+export type Side = "left" | "right";
+export type Points = 3 | 5 | 7 | 9;
+export type PaddleSizeKey = "small" | "medium" | "large";
+
+export type Rect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export function rect(x: number, y: number, width: number, height: number) {
+  return {
+    x,
+    y,
+    width,
+    height,
+  } as Rect;
+}
+
+export type Circle = {
+  x: number;
+  y: number;
+  radius: number;
+};
+
+export function circle(x: number, y: number, radius: number) {
+  return {
+    x,
+    y,
+    radius,
+  } as Circle;
+}
+
+export type Velocity = {
+  vx: number;
+  vy: number;
+};
+
+export type Inputs = {
+  up: boolean;
+  down: boolean;
+  left: boolean;
+  right: boolean;
+};
+
+export type InputKeys = "up" | "down" | "left" | "right";
+
+export type PlayerState = {
+  id: number;
+  name: string;
+  avatar_url: string | null;
+  side: Side;
+  paddle: Rect;
+  velocity: Velocity;
+  score: number;
+  inputs: Inputs;
+  // Precomputed bounds for free-move clamp
+  leftBound: number;
+  rightBound: number;
+  color?: string; // frontend-only cosmetic
+};
+
+export type BallState = {
+  area: Circle;
+  velocity: Velocity;
+  lastHit: "L" | "R" | null;
+  sinceLastHitMs: number;
+  samePaddleCooldownMs: number;
+  acceleration: number;
+};
+
+export type BallSprite = {
+  img: HTMLImageElement | null;
+  ready: boolean;
+  angle: number;
+  spinPerSec: number;
+};
+
+export type MatchConfig = {
+  worldW: number;
+  worldH: number;
+  paddleWidth: number;
+  paddleHeights: Record<PaddleSizeKey, number>;
+};
+
+export type MatchSettings = {
+  pointsToWin: Points;
+  paddleHeight: PaddleSizeKey;
+  freeMove: boolean;
+  hostSide: Side;
+};
+
+export type MatchState = {
+  matchId: number;
+  paused: boolean;
+  pointsToWin: number;
+  paddleHeight: number;
+  freeMove: boolean;
+  leftP: PlayerState;
+  rightP: PlayerState;
+  ball: BallState;
+  // Timers
+  pauseCooldownAt?: number;
+};
+
+export type BallSnapshot = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+};
+
+export type PlayerSnapshot = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  score: number;
+  id: number;
+  name: string;
+};
+
+export type SettingsSnapshot = {
+  pointsToWin: number;
+  freeMove: boolean;
+  paddleHeight: number;
+};
+
+export type SnapshotWire = {
+  ball: BallSnapshot;
+  leftP: PlayerSnapshot;
+  rightP: PlayerSnapshot;
+  settings: SettingsSnapshot;
+};
+// frontend/src/helpers/LobbyOnlineState.ts
+import { Realtime } from "./ws";
+import type { AllWsIncoming, LWOInviteAnswer, LWOInviteCancel, LWOInviteSend, LWOLeave, LWOReady, LWOSetSettings } from "./ws_types";
+import type { UserStatus, PublicUser, LobbySnapshot, MatchSettingsSnapshot, LobbyState } from "./state_types";
+
+const defaultSettings: MatchSettingsSnapshot = {
+  pointsToWin: 3,
+  paddleSize: "medium",
+  freeMove: false,
+  hostSide: "left",
+};
+
+const state: LobbyState = {
+  meId: null,
+  opponent: null,
+  settings: { ...defaultSettings },
+  outgoing: null,
+  inboxQueue: [],
+  activeIncoming: null,
+  userStatus: {},
+  lobbySnapshot: null,
+  loading: false,
+  error: null,
+};
+
+/** Minimal reactive core */
+type Listener = (s: LobbyState) => void;
+
+const listeners = new Set<Listener>();
+
+function emit() {
+  for (const l of listeners) l(state);
+}
+
+export function subscribe(fn: Listener) {
+  listeners.add(fn);
+  fn(state);
+  return () => listeners.delete(fn);
+}
+
+/** WS wiring */
+const realtime = new Realtime("/api/ws");
 
 /**
- * WebSocket wire protocol (client <-> server).
- *
- * One endpoint (/api/ws), multiple "domains" if needed later.
- * For now we only use the "chat" domain.
- *
- * Client sends:
- *  - subscribe/unsubscribe: start/stop receiving live events for a chat
- *  - send: persist a message in DB and broadcast to subscribers
- *  - typing: ephemeral "user is typing" signal (no DB write)
- *  - ping: keep-alive / latency checks (server replies with "pong")
- *
- * Server sends:
- *  - ready: handshake success (contains userId)
- *  - message: new message persisted and fanned-out
- *  - typing: other user's typing indicator
- *  - error: structured error (e.g., auth, validation, rate-limit)
- *  - pong: reply to ping
+ * **`onWs`** determines the behaviour of the lobby state when an incoming web socket message is received
+ * @param msg The web socket message received is of type LobbyWsIncoming (see ws_types.ts)
+ * Depending on msg, an outgoing response might be sent through WebSocket, using realtime.send()
+ * This response is of type LobbyWsOutgoing (see ws_types.ts)
  */
+function onWs(msg: AllWsIncoming) {
+  switch (msg.type) {
+    case "ready": {
+      state.meId = msg.userId;
+      emit();
+      break;
+    }
 
-import type { FastifyInstance, FastifyRequest } from "fastify";
+    case "user_status": {
+      state.userStatus[msg.userId] = msg.status as UserStatus;
+      emit();
+      break;
+    }
 
-export async function getUserIdFromRequest(fastify: FastifyInstance, req: FastifyRequest): Promise<number> {
-  const token = req.cookies?.["session"];
-  if (!token) throw new Error("missing session cookie");
+    case "lobby_invite_error": {
+      // Server-side rejections (busy, already_invited, rate_limited, etc.)
+      state.error = msg.message ?? msg.code;
+      // If this was about our current outgoing flow, reset it so the UI overlay closes
+      if (["target_busy", "already_invited", "rate_limited"].includes(msg.code)) {
+        state.outgoing = null;
+      }
+      emit();
+      break;
+    }
 
-  const decoded: any = await fastify.jwt.verify(token);
-  const id = Number(decoded?.sub);
-  if (!Number.isInteger(id) || id <= 0) throw new Error("bad sub");
-  return id;
+    case "lobby_invite": {
+      if (state.meId && msg.from === state.meId) {
+        // Our own invite got an id
+        if (!state.outgoing) break; // stale echo; ignore
+        state.outgoing.inviteId = msg.inviteId;
+        if (state.outgoing.cancelRequestedBeforeAck) {
+          realtime.send({ type: "lobby_invite_cancel", inviteId: msg.inviteId } as LWOInviteCancel); // honor the earlier cancel
+          state.outgoing.cancelRequestedBeforeAck = false;
+        }
+        emit();
+      } else if (state.meId && msg.to === state.meId) {
+        // Genuine incoming
+        state.inboxQueue.push({ inviteId: msg.inviteId, from: msg.from });
+        if (!state.activeIncoming) {
+          state.activeIncoming = state.inboxQueue.shift()!;
+        }
+        emit();
+      }
+      break;
+    }
+    case "lobby_invite_canceled":
+    case "lobby_invite_expired": {
+      if (state.outgoing?.inviteId === msg.inviteId) {
+        state.outgoing = null;
+        emit();
+      }
+      // If an active incoming died, promote the next queued
+      if (state.activeIncoming?.inviteId === msg.inviteId) {
+        state.activeIncoming = null;
+        state.activeIncoming = state.inboxQueue.shift() ?? null;
+        emit();
+      } else {
+        // Or remove from queue if present
+        const i = state.inboxQueue.findIndex((x) => x.inviteId === msg.inviteId);
+        if (i >= 0) {
+          state.inboxQueue.splice(i, 1);
+          emit();
+        }
+      }
+      break;
+    }
+
+    case "lobby_invite_response": {
+      if (state.outgoing?.inviteId === msg.inviteId) {
+        if (msg.accepted) {
+          // Keep the waiting overlay up; we expect "match_lobby" next
+          state.outgoing = null;
+        } else {
+          // Declined → clear outgoing so UI overlay closes
+          state.outgoing = null;
+        }
+        emit();
+      }
+      break;
+    }
+
+    case "lobby_snapshot": {
+      // Lobby formed — authoritative server snapshot
+      state.lobbySnapshot = {
+        lobbyId: msg.lobbySnapshot.lobbyId,
+        hostId: msg.lobbySnapshot.hostId,
+        guestId: msg.lobbySnapshot.guestId,
+        settings: msg.lobbySnapshot.settings,
+        locked: msg.lobbySnapshot.locked,
+        ready: msg.lobbySnapshot.ready,
+      };
+      // Clear invites on both sides; we're moving to lobby
+      state.outgoing = null;
+      state.inboxQueue.length = 0;
+      state.activeIncoming = null;
+      emit();
+      break;
+    }
+
+    case "lobby_ready": {
+      if (state.lobbySnapshot) {
+        state.lobbySnapshot.ready[msg.userId] = msg.ready;
+      }
+      emit();
+      break;
+    }
+
+    case "lobby_closed": {
+      state.lobbySnapshot = null;
+      emit();
+      break;
+    }
+  }
 }
-//ws_controller.ts
+
+/**
+ * **`Lobbies`** encapsulates public interactions with the Lobbies state
+ * Depending on the interaction, an outgoing response might be sent through WebSocket, using realtime.send()
+ * This response is of type LobbyWsOutgoing (see ws_types.ts)
+ */
+let stopWsListener: (() => void) | null = null;
+
+export const Lobbies = {
+  init() {
+    if (!stopWsListener) {
+      stopWsListener = realtime.on(onWs);
+      realtime.connect();
+    }
+  },
+
+  shutdown() {
+    if (stopWsListener) {
+      stopWsListener();
+      stopWsListener = null;
+      realtime.close();
+    }
+  },
+
+  /** View selects an opponent */
+  selectOpponent(u: PublicUser | null) {
+    state.opponent = u;
+    emit();
+  },
+
+  /** View tweaks pre-lobby settings */
+  setSettings(partial: Partial<MatchSettingsSnapshot>) {
+    state.settings = { ...state.settings, ...partial };
+    if (state.lobbySnapshot) {
+      realtime.send({ type: "lobby_set_settings", lobbyId: state.lobbySnapshot.lobbyId, settings: state.settings } as LWOSetSettings);
+    }
+    emit();
+  },
+
+  /** Client-side hint; server remains authoritative */
+  isUserBusy(userId: number) {
+    const s = state.userStatus[userId];
+    return s === "playing" || s === "in_lobby" || s === "dnd";
+  },
+
+  /** Is the Invite button currently allowed? */
+  canInviteSelected() {
+    const opp = state.opponent;
+    if (!opp) return false;
+    if (state.outgoing) return false; // already waiting on one
+    if (this.isUserBusy(opp.id)) return false; // UI hint
+    return true;
+  },
+
+  /** Send invite to the selected opponent */
+  inviteSelected() {
+    const opp = state.opponent;
+    if (!opp) return;
+    state.outgoing = {
+      inviteId: null,
+      to: opp.id,
+      since: Date.now(),
+      cancelRequestedBeforeAck: false,
+    };
+    emit();
+    realtime.send({ type: "lobby_invite_send", from: state.meId!, to: opp.id } satisfies LWOInviteSend);
+  },
+
+  /** Cancel invite (works even if inviteId isn’t acked yet) */
+  cancelInvite() {
+    if (!state.outgoing) return;
+    const id = state.outgoing.inviteId;
+    if (id === null) {
+      state.outgoing.cancelRequestedBeforeAck = true; // cancel once ack arrives
+    } else {
+      realtime.send({ type: "lobby_invite_cancel", inviteId: id } as LWOInviteCancel);
+    }
+    emit();
+  },
+
+  /** Respond to the currently active incoming invite */
+  answerActiveInvite(accept: boolean) {
+    if (!state.activeIncoming) return;
+    const { inviteId } = state.activeIncoming;
+    realtime.send({ type: "lobby_invite_answer", inviteId: inviteId, accept: accept } as LWOInviteAnswer);
+
+    if (!accept) {
+      // Decline → pop and show next queued invite, if any
+      state.activeIncoming = state.inboxQueue.shift() ?? null;
+      emit();
+    } else {
+      // Accept → wait for "match_lobby"; we keep the modal open or let the view close it
+      state.activeIncoming = null;
+      emit();
+    }
+  },
+
+  /** Optional: when accepting one, decline all remaining queued invites */
+  declineAllQueuedExcept(inviteId: number) {
+    for (const inv of state.inboxQueue) {
+      if (inv.inviteId !== inviteId) realtime.send({ type: "lobby_invite_answer", inviteId: inv.inviteId, accept: false } as LWOInviteAnswer);
+    }
+    state.inboxQueue = state.inboxQueue.filter((x) => x.inviteId === inviteId);
+    emit();
+  },
+
+  /** Mark host start button ready */
+  setReady(ready: boolean) {
+    if (!state.lobbySnapshot || !state.meId) return;
+    const lobbyId = state.lobbySnapshot.lobbyId;
+
+    state.lobbySnapshot.ready[state.meId] = ready;
+    emit();
+    realtime.send({ type: "lobby_ready", lobbyId, ready } as LWOReady);
+  },
+
+  leaveLobby() {
+    const lobbyId = state.lobbySnapshot?.lobbyId;
+    if (!lobbyId) return;
+    realtime.send({ type: "lobby_leave", lobbyId } as LWOLeave);
+  },
+
+  /** Read helpers for the view */
+  getState() {
+    return state;
+  },
+  getLobby() {
+    return state.lobbySnapshot;
+  },
+
+  /** Re-export subscribe so views can attach */
+  subscribe,
+};
+// src/views/MatchLocalView.ts
+import { domElem as h, mount } from "../ui/DomElement";
+import { GameRenderer } from "../helpers/GameRenderer";
+import { GameLocalDriver } from "../helpers/GameLocalDriver";
+import { createGameLocalState } from "../helpers/GameLocalState";
+import type { Settings } from "./PlayLocalView";
+import type { MatchSettings, MatchState, Side } from "../helpers/GameTypes";
+import { Avatar } from "../ui/Avatar";
+import * as http from "../api/http";
+
+export function MatchLocalView(root: HTMLElement) {
+  /** -- Config settings from PlayView */
+  const raw = sessionStorage.getItem("play:local:current");
+  if (!raw) {
+    location.hash = "/player/chooser";
+    return () => {};
+  }
+
+  const configSettings: Settings = JSON.parse(raw);
+
+  /** -- DOM elements */
+  const wrap = h("div", { class: "flex-1 min-h-0 grid place-items-center bg-emerald-50" });
+  const canvas = h("canvas", { class: "block rounded-md shadow border border-emerald-100 bg-white" }) as HTMLCanvasElement;
+  const header = h("div", { class: "h-16 px-4 border-b border-emerald-100 bg-emerald-50/70 flex items-center justify-between" });
+  mount(root, header, mount(wrap, canvas));
+
+  /** -- Game Settings */
+  const renderer = new GameRenderer(wrap, canvas, header);
+  renderer.setBallSprite("/ball.png");
+
+  const matchSettings: MatchSettings = {
+    pointsToWin: configSettings.pointsToWin,
+    paddleHeight: configSettings.paddleSize,
+    freeMove: configSettings.freeMove,
+    hostSide: configSettings.mySide,
+  };
+  const state: MatchState = createGameLocalState(
+    configSettings.matchId!,
+    { id: configSettings.me.id, name: configSettings.me.pseudo, avatar_url: configSettings.me.avatar_url },
+    { id: configSettings.opponent!.id, name: configSettings.opponent!.pseudo, avatar_url: configSettings.opponent!.avatar_url },
+    configSettings.mySide,
+    matchSettings
+  );
+
+  /** -- DOM Elements - Header content set with game settings */
+  const leftInfoWrap = h("div", { class: "flex items-center gap-2" });
+  const leftInfoAvatar = Avatar(state.leftP.avatar_url, 28);
+  const leftInfoName = h("span", { class: "font-bold", text: state.leftP.name });
+  const leftInfoScore = h("span", { class: "ml-2 font-bold text-lg text-emerald-700 bg-white rounded-lg min-w-10 text-center shadow", text: String(state.leftP.score) });
+  mount(leftInfoWrap, leftInfoAvatar, leftInfoName, leftInfoScore);
+
+  const rightInfoWrap = h("div", { class: "flex items-center gap-2" });
+  const rightInfoScore = h("span", { class: "mr-2 font-bold text-lg text-emerald-700 bg-white rounded-lg min-w-10 text-center shadow", text: String(state.rightP.score) });
+  const rightInfoName = h("span", { class: "font-bold", text: state.rightP.name });
+  const rightInfoAvatar = Avatar(state.rightP.avatar_url, 28);
+  mount(rightInfoWrap, rightInfoScore, rightInfoName, rightInfoAvatar);
+
+  mount(header, leftInfoWrap, rightInfoWrap);
+
+  /** -- Game driver */
+  const driver = GameLocalDriver(renderer, state, {
+    onScore: (leftScore, rightScore) => {
+      leftInfoScore.textContent = String(leftScore);
+      rightInfoScore.textContent = String(rightScore);
+    },
+    onOver: async (leftScore, rightScore) => {
+      await http.putRequest(`/api/matches/${state.matchId}/result`, { scoreP1: leftScore, scoreP2: rightScore });
+      sessionStorage.removeItem("play:local:current");
+    },
+  });
+
+  /** -- Keyboard mapping to inputs */
+  const leftKeys = { up: "z", down: "s", left: "q", right: "d" };
+  const rightKeys = { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" };
+
+  const keyDownHandler = (e: KeyboardEvent) => {
+    if (e.key === " " && !e.repeat) {
+      console.log("hihi space pressed");
+      driver.togglePause();
+      e.preventDefault();
+      return;
+    }
+
+    const hit = (map: any, side: Side) => {
+      const pair = Object.entries(map).find(([, k]) => k === e.key);
+      if (pair) {
+        driver.input(side, pair[0] as any, true);
+        e.preventDefault();
+      }
+    };
+
+    hit(leftKeys, "left");
+    hit(rightKeys, "right");
+  };
+
+  const keyUpHandler = (e: KeyboardEvent) => {
+    const hit = (map: any, side: Side) => {
+      const pair = Object.entries(map).find(([, k]) => k === e.key);
+      if (pair) {
+        driver.input(side, pair[0] as any, false);
+        e.preventDefault();
+      }
+    };
+
+    hit(leftKeys, "left");
+    hit(rightKeys, "right");
+  };
+
+  window.addEventListener("keydown", keyDownHandler, { passive: false });
+  window.addEventListener("keyup", keyUpHandler, { passive: false });
+  driver.start();
+
+  return () => {
+    window.removeEventListener("keydown", keyDownHandler);
+    window.removeEventListener("keyup", keyUpHandler);
+    driver.stop();
+    renderer.dispose();
+  };
+}
+// backend/src/controllers/ws_controller.ts
 
 /**
  * WebSocket controller = tiny router for frames.
  * It does transport concerns (parse, rate-limit, broadcast), and delegates
  * domain rules to your existing services (no duplication).
  */
-import type { FastifyInstance } from "fastify";
-import type { WebSocket } from "ws";
-import type { Incoming, Outgoing } from "./ws_types";
-import { Rooms } from "./ws_rooms";
-import { RateLimiter } from "./ws_rateLimiter";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { RawData, WebSocket } from "ws";
+import type {
+  AllWsOutgoing,
+  AllWsIncoming,
+  SWOPong,
+  LWIInviteSend,
+  SWIPing,
+  LWIInviteCancel,
+  LWIInviteAnswer,
+  LWISetSettings,
+  LWIReady,
+  LWILeave,
+  MWISubscribe,
+  MWIUnsubscribe,
+  MWIInput,
+  MWITogglePause,
+  CWISubscribe,
+  CWIUnsubscribe,
+  CWITyping,
+  CWISend,
+  CWOTyping,
+  CWOMessage,
+  SWOReady,
+  SWOError,
+  CWOPresence,
+  LWOInvite,
+} from "../types/ws_types";
+import { Rooms } from "../utils/ws_rooms";
+import { RateLimiter } from "../utils/ws_rateLimiter";
 import { err } from "../utils/errors";
+import { MAX_JSON } from "../types/ws_types";
+
 import * as chatService from "../services/chat.service";
+import * as friendsModel from "../models/friends.model";
+import * as lobbyService from "../services/lobby.service";
 
-export class WsController {
-  private rateLimiter = new RateLimiter(10, 10_000);
+/* =========================================================== */
+/* =========================================================== */
+/* =========================================================== */
 
-  constructor(private fastify: FastifyInstance, private rooms: Rooms) {}
+const rateLimiterInputs = new RateLimiter(500, 10_000);
+const rateLimiterChats = new RateLimiter(10, 10_000);
 
-  private send(ws: WebSocket, payload: Outgoing) {
-    try {
-      if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(payload));
-    } catch {}
+function safeSendJSON(ws: WebSocket, payload: AllWsOutgoing) {
+  try {
+    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(payload));
+  } catch {}
+}
+
+function assertNever(x: AllWsIncoming): never {
+  throw new Error(`Unhandled WS type: ${(x as any)?.type}`);
+}
+
+/* =========================================================== */
+/* =========================================================== */
+/* =========================================================== */
+
+export function wsController(ws: WebSocket, req: FastifyRequest) {
+  const meId = Number((req.user as any).sub);
+  if (!meId) {
+    safeSendJSON(ws, { type: "error", code: "UNAUTHORIZED", message: "Invalid or missing session" } satisfies SWOError);
+    return ws.close(4401, "unauthorized");
   }
 
-  private pingFrameHandler(ws: WebSocket) {
-    this.send(ws, { type: "pong", at: new Date().toISOString() });
-  }
+  /** -- Register socket & handshake */
+  const rooms = req.server.rooms;
+  rooms.addUserSocket(meId, ws);
+  safeSendJSON(ws, { type: "ready", userId: meId } as SWOReady);
 
-  private subscribeFrameHandler(ws: WebSocket, meId: number, chatId: number) {
-    if (!Number.isInteger(chatId) || chatId <= 0) throw err("CHAT_NOT_FOUND");
-    chatService.assertMembership(meId, chatId);
-    this.rooms.subscribe(chatId, ws);
-  }
+  /** -- Notify friends that i am online */
+  void notifyMeOnlineToFriends(rooms, meId);
+  void getMyOnlineFriends(ws, rooms, meId);
 
-  private unsubscribeFrameHandler(ws: WebSocket, chatId: number) {
-    if (!Number.isInteger(chatId) || chatId <= 0) return;
-    this.rooms.unsubscribe(chatId, ws);
-  }
+  const { userId, status } = lobbyService.onUserConnected(meId);
+  rooms.broadcastToUsers([meId], { type: "user_status", userId, status });
 
-  private typingFrameHandler(meId: number, chatId: number, isTyping: boolean) {
-    if (!Number.isInteger(chatId) || chatId <= 0) throw err("CHAT_NOT_FOUND");
-    chatService.assertMembership(meId, chatId);
-    this.rooms.broadcastToChat(chatId, {
-      type: "typing",
-      chatId,
-      userId: meId,
-      isTyping: !!isTyping,
-      at: new Date().toISOString(),
-    });
-  }
+  lobbyService.setLobbyEmitter(({ targets, payload }) => {
+    rooms.broadcastToUsers(targets, payload);
+  });
 
-  private sendFrameHandler(ws: WebSocket, meId: number, chatId: number, body: string) {
-    if (!this.rateLimiter.allow(ws)) {
-      return this.send(ws, { type: "error", code: "RATE_LIMIT", message: "Too many messages" });
+  /** -- Handle ws interactions (incoming message or close signal) */
+  ws.on("message", async (raw) => handlingWsOnMessage(raw, rooms, ws, meId));
+  ws.on("close", () => handlingWsOnClose(rooms, ws, meId));
+}
+
+/* =========================================================== */
+/* =========================================================== */
+/* =========================================================== */
+
+async function notifyMeOnlineToFriends(rooms: Rooms, meId: number) {
+  try {
+    const friendRows = friendsModel.listMyFriends(meId);
+    const friendIds = friendRows.map((r) => r.friend_id);
+    rooms.broadcastToUsers(friendIds, { type: "presence", userId: meId, online: true });
+  } catch {}
+}
+
+async function getMyOnlineFriends(ws: WebSocket, rooms: Rooms, meId: number) {
+  try {
+    const friendRows = friendsModel.listMyFriends(meId);
+    for (const r of friendRows) {
+      const online = rooms.hasOnline(r.friend_id);
+      safeSendJSON(ws, { type: "presence", userId: r.friend_id, online });
     }
+  } catch {}
+}
 
-    if (!Number.isInteger(chatId) || chatId <= 0) throw err("CHAT_NOT_FOUND");
+async function handlingWsOnMessage(raw: RawData, rooms: Rooms, ws: WebSocket, meId: number) {
+  /** Check that we have raw data */
+  const txt = typeof raw === "string" ? raw : Buffer.isBuffer(raw) ? raw.toString("utf8") : "";
+  if (!txt || txt.length > MAX_JSON) return;
 
-    const saved = chatService.sendChatMessage(meId, chatId, body);
-    const chat = chatService.assertMembership(meId, chatId);
-    const payload: Outgoing = { type: "message", chatId, message: saved };
-
-    this.rooms.broadcastToChat(chatId, payload);
-    this.rooms.broadcastToUsers([chat.user_a_id, chat.user_b_id], payload);
+  /** Parse txt to JSON */
+  let msg: AllWsIncoming;
+  try {
+    msg = JSON.parse(txt);
+  } catch {
+    return safeSendJSON(ws, { type: "error", code: "BAD_JSON", message: "Invalid JSON" } satisfies SWOError);
   }
 
-  async onFrame(ws: WebSocket, meId: number, msg: Incoming) {
+  /** Delegate to controller to handle the message type */
+  try {
+    await onFrame(ws, rooms, meId, msg);
+  } catch (e: any) {
+    const code = e?.code ?? "WS_ERROR";
+    const message = e?.message ?? "Error";
+    safeSendJSON(ws, { type: "error", code, message } satisfies SWOError);
+  }
+}
+
+async function handlingWsOnClose(rooms: Rooms, ws: WebSocket, meId: number) {
+  rooms.removeUserSocket(meId, ws);
+  rooms.cleanupSocket(ws);
+
+  lobbyService.onUserDisconnected(meId);
+
+  try {
+    const friendRows = friendsModel.listMyFriends(meId);
+    const friendIds = friendRows.map((r) => r.friend_id);
+    rooms.broadcastToUsers(friendIds, { type: "presence", userId: meId, online: false } satisfies CWOPresence);
+  } catch {}
+}
+
+/* =========================================================== */
+/* =========================================================== */
+/* =========================================================== */
+
+async function onFrame(ws: WebSocket, rooms: Rooms, meId: number, msg: AllWsIncoming) {
+  try {
     switch (msg.type) {
       case "ping":
-        return this.pingFrameHandler(ws);
-      case "subscribe":
-        return this.subscribeFrameHandler(ws, meId, msg.chatId);
-      case "unsubscribe":
-        return this.unsubscribeFrameHandler(ws, msg.chatId);
-      case "typing":
-        return this.typingFrameHandler(meId, msg.chatId, msg.isTyping);
-      case "send":
-        return this.sendFrameHandler(ws, meId, msg.chatId, msg.body);
+        return handleOFPing(ws, rooms, meId, msg);
+
+      case "lobby_invite_send":
+        return handleOFLobbyInviteSend(ws, rooms, meId, msg);
+
+      case "lobby_invite_cancel":
+        return handleOFLobbyInviteCancel(ws, rooms, meId, msg);
+      case "lobby_invite_answer":
+        return handleOFLobbyInviteAnswer(ws, rooms, meId, msg);
+      case "lobby_set_settings":
+        return handleOFLobbySetSettings(ws, rooms, meId, msg);
+      case "lobby_ready":
+        return handleOFLobbyReady(ws, rooms, meId, msg);
+      case "lobby_leave":
+        return handleOFLobbyLeave(ws, rooms, meId, msg);
+
+      case "match_subscribe":
+        return handleOFMatchSubscribe(ws, rooms, meId, msg);
+      case "match_unsubscribe":
+        return handleOFMatchUnsubscribe(ws, rooms, meId, msg);
+      case "match_input":
+        return handleOFMatchInput(ws, rooms, meId, msg);
+      case "match_toggle_pause":
+        return handleOFMatchTogglePause(ws, rooms, meId, msg);
+
+      case "chat_subscribe":
+        return handleOFChatSubscribe(ws, rooms, meId, msg);
+      case "chat_unsubscribe":
+        return handleOFChatUnsubscribe(ws, rooms, meId, msg);
+      case "chat_typing":
+        return handleOFChatTyping(ws, rooms, meId, msg);
+      case "chat_send":
+        return handleOFChatSend(ws, rooms, meId, msg);
+
+      default:
+        assertNever(msg);
     }
+  } catch (e: any) {
+    safeSendJSON(ws, { type: "error", code: e?.code ?? "WS_ERROR", message: e?.message ?? "Error" });
   }
 }
-// src/plugins/ws_hub.ts
-import type { Outgoing } from "./ws_types";
-import { Rooms } from "./ws_rooms";
 
-let roomsSingleton: Rooms | null = null;
-
-export function setRooms(r: Rooms) {
-  roomsSingleton = r;
+function handleOFPing(ws: WebSocket, rooms: Rooms, meId: number, msg: SWIPing) {
+  safeSendJSON(ws, { type: "pong", at: new Date().toISOString() } satisfies SWOPong);
 }
 
-export function broadcastToUsers(userIds: number[], payload: Outgoing) {
-  if (!roomsSingleton) return;
-  roomsSingleton.broadcastToUsers(userIds, payload);
-}
-// ws_plugin.ts
-/**
- * This plugin exposes GET /api/ws (HTTP handshake) and then switches
- * the connection to the WebSocket protocol (101 Switching Protocols).
- *
- * After the upgrade:
- *  - We authenticate using the same session cookie as HTTP routes
- *  - We register the socket under the user's id
- *  - We listen for JSON frames and forward them to the WsController
- *  - We clean up on close (unsubscribe rooms, remove from user sockets)
- */
-
-import fp from "fastify-plugin";
-import { FastifyInstance, FastifyRequest } from "fastify";
-import websocket, { WebsocketHandler } from "@fastify/websocket";
-import type { WebSocket } from "@fastify/websocket";
-import { Rooms } from "./ws_rooms";
-import { WsController } from "./ws_controller";
-import { getUserIdFromRequest } from "./ws_auth";
-import { Incoming, Outgoing } from "./ws_types";
-import * as friendsModel from "../models/friends.model";
-import { setRooms, broadcastToUsers } from "./ws_hub";
-
-const MAX_JSON = 4 * 1024;
-
-async function wsPlugin(fastify: FastifyInstance) {
-  await fastify.register(websocket, { options: { maxPayload: MAX_JSON } });
-
-  const rooms = new Rooms();
-  setRooms(rooms);
-  const controller = new WsController(fastify, rooms);
-
-  fastify.get("/api/ws", { websocket: true }, async (ws: WebSocket, req: FastifyRequest) => {
-    let meId: number;
-    try {
-      meId = await getUserIdFromRequest(fastify, req);
-    } catch {
-      const payload: Outgoing = { type: "error", code: "UNAUTHORIZED", message: "Invalid or missing session" };
-      ws.send(JSON.stringify(payload));
-      return ws.close(4401, "unauthorized");
-    }
-
-    rooms.addUserSocket(meId, ws);
-
-    // Notify friends that I am online
-    try {
-      const friendRows = friendsModel.listMyFriends(meId);
-      const friendIds = friendRows.map((r) => r.friend_id);
-      broadcastToUsers(friendIds, { type: "presence", userId: meId, online: true });
-    } catch {}
-
-    ws.send(JSON.stringify({ type: "ready", userId: meId } as Outgoing));
-
-    try {
-      const friendRows = friendsModel.listMyFriends(meId);
-      for (const r of friendRows) {
-        const online = rooms.hasOnline(r.friend_id);
-        ws.send(JSON.stringify({ type: "presence", userId: r.friend_id, online }));
-      }
-    } catch {}
-
-    const mySubs = new Set<number>();
-
-    ws.on("message", async (raw) => {
-      const txt = typeof raw === "string" ? raw : Buffer.isBuffer(raw) ? raw.toString("utf8") : "";
-      if (!txt || txt.length > MAX_JSON) return;
-
-      let msg: Incoming;
-      try {
-        msg = JSON.parse(txt);
-      } catch {
-        return ws.send(JSON.stringify({ type: "error", code: "BAD_JSON", message: "Invalid JSON" } satisfies Outgoing));
-      }
-
-      if (msg.type === "subscribe" && Number.isInteger(msg.chatId)) mySubs.add(msg.chatId);
-      if (msg.type === "unsubscribe" && Number.isInteger(msg.chatId)) mySubs.delete(msg.chatId);
-
-      try {
-        await controller.onFrame(ws, meId, msg);
-      } catch (e: any) {
-        const code = e?.code ?? "WS_ERROR";
-        const message = e?.message ?? "Error";
-        ws.send(JSON.stringify({ type: "error", code, message } satisfies Outgoing));
-      }
-    });
-
-    ws.on("close", () => {
-      rooms.removeUserSocket(meId, ws);
-      for (const c of mySubs) rooms.unsubscribe(c, ws);
-      mySubs.clear();
-
-      try {
-        const friendRows = friendsModel.listMyFriends(meId);
-        const friendIds = friendRows.map((r) => r.friend_id);
-        broadcastToUsers(friendIds, { type: "presence", userId: meId, online: false });
-      } catch {}
-    });
-  });
+/** -- LOBBY */
+function handleOFLobbyInviteSend(ws: WebSocket, rooms: Rooms, meId: number, msg: LWIInviteSend) {
+  const res = lobbyService.inviteSend(meId, msg.to);
+  if (!res) return;
+  rooms.broadcastToUsers(res.targets, res.payload);
 }
 
-export default fp(wsPlugin, { name: "ws" });
-// ws_rateLimiter.ts
-import type { WebSocket } from "@fastify/websocket";
+function handleOFLobbyInviteCancel(ws: WebSocket, rooms: Rooms, meId: number, msg: LWIInviteCancel) {
+  const res = lobbyService.inviteCancel(meId, msg.inviteId);
+  if (!res) return;
+  rooms.broadcastToUsers(res.targets, res.payload);
+}
 
-/**
- * - `count`: Number of allowed events in this window
- * - `resetAt`: Epoch milliseconds when this window resets
- */
-type Bucket = {
-  count: number;
-  resetAt: number;
-};
+function handleOFLobbyInviteAnswer(ws: WebSocket, rooms: Rooms, meId: number, msg: LWIInviteAnswer) {
+  const resInvite = lobbyService.inviteAnswer(meId, msg.inviteId, msg.accept);
+  if (!resInvite) return;
 
-/**
- * Simple token-bucket rate limiter keyed by Websocket:
- * - Each socket has its own bucket
- * - Bucket resets after `windowMs`
- * - Each allowed event increments `count`
- * - Once `count` exceeds `limit`, allow() returns false until reset
- */
-export class RateLimiter {
-  constructor(private limit: number, private windowMs: number) {}
-
-  /**
-   * Mapping between a WebSocket and current bucket state
-   */
-  private buckets = new WeakMap<WebSocket, Bucket>();
-
-  /**
-   * Attempt to allow an action for this socket.
-   * Returns true if allowed, false if rate limit exceeded
-   */
-  allow(ws: WebSocket) {
-    const now = Date.now();
-    let bucket = this.buckets.get(ws);
-
-    // First event or window expired -> reset bucket
-    if (!bucket || now >= bucket.resetAt) {
-      bucket = { count: 0, resetAt: now + this.windowMs };
-      this.buckets.set(ws, bucket);
-    }
-
-    // Actions limit exceeded -> reject
-    if (bucket.count >= this.limit) return false;
-
-    // Otherwise, increment and allow
-    bucket.count++;
-    return true;
+  if (resInvite.payload.type === "lobby_invite_response" && msg.accept) {
+    const invFrom = resInvite.targets[0]!;
+    const invTo = resInvite.targets[1]!;
+    const resLobby = lobbyService.createLobby(invFrom, invTo);
+    rooms.broadcastToUsers(resInvite.targets, resInvite.payload);
+    rooms.broadcastToUsers(resLobby.targets, resLobby.payload);
+  } else {
+    rooms.broadcastToUsers(resInvite.targets, resInvite.payload);
   }
 }
-// ws_rooms.ts
-import type { WebSocket } from "@fastify/websocket";
-import type { Outgoing } from "./ws_types";
 
-export class Rooms {
-  /**
-   * Maps : chatId -> set of sockets, userId -> set of sockets
-   * (One user can have multiple sockets: tabs/devices)
-   */
-  private chatSubs = new Map<number, Set<WebSocket>>();
-  private userSockets = new Map<number, Set<WebSocket>>();
+function handleOFLobbySetSettings(ws: WebSocket, rooms: Rooms, meId: number, msg: LWISetSettings) {
+  const res = lobbyService.setSettings(msg.lobbyId, meId, msg.settings);
+  if (!res) return;
+  rooms.broadcastToUsers(res.targets, res.payload);
+}
 
-  /**
-   * Adds a given socket under the given userId
-   */
-  addUserSocket(userId: number, ws: WebSocket) {
-    if (!this.userSockets.has(userId)) this.userSockets.set(userId, new Set<WebSocket>());
-    this.userSockets.get(userId)!.add(ws);
-  }
-
-  /**
-   * Removes a given socket from the give userId's set; delete the set if empty
-   */
-  removeUserSocket(userId: number, ws: WebSocket) {
-    const set = this.userSockets.get(userId);
-    if (!set) return;
-    set.delete(ws);
-    if (set.size === 0) this.userSockets.delete(userId);
-  }
-
-  /**
-   * Subscribe a given socket to a given chatId
-   */
-  subscribe(chatId: number, ws: WebSocket) {
-    if (!this.chatSubs.has(chatId)) this.chatSubs.set(chatId, new Set<WebSocket>());
-    this.chatSubs.get(chatId)!.add(ws);
-  }
-
-  /**
-   * Unsubscribe a given socket from a given chatId
-   */
-  unsubscribe(chatId: number, ws: WebSocket) {
-    const set = this.chatSubs.get(chatId);
-    if (!set) return;
-    set.delete(ws);
-    if (set.size === 0) this.chatSubs.delete(chatId);
-  }
-
-  /**
-   * Broadcast a payload to all sockets subscribed to a given chatId
-   */
-  broadcastToChat(chatId: number, payload: Outgoing) {
-    const set = this.chatSubs.get(chatId);
-    if (!set) return;
-    const data = JSON.stringify(payload);
-    for (const ws of set) this.safeSend(ws, data);
-  }
-
-  /**
-   * Broadcast a payload to all sockets for each user in userIds
-   */
-  broadcastToUsers(userIds: number[], payload: Outgoing) {
-    const data = JSON.stringify(payload);
-    for (const uid of userIds) {
-      const set = this.userSockets.get(uid);
-      if (!set) continue;
-      for (const ws of set) this.safeSend(ws, data);
-    }
-  }
-
-  hasOnline(userId: number) {
-    const set = this.userSockets.get(userId);
-    return !!set && set.size > 0;
-  }
-
-  /**
-   * Sends data only if the socket is open; swallow network errors
-   */
-  private safeSend(ws: WebSocket, data: string) {
-    try {
-      if (ws.readyState === ws.OPEN) ws.send(data);
-    } catch {}
+function handleOFLobbyReady(ws: WebSocket, rooms: Rooms, meId: number, msg: LWIReady) {
+  const outs = lobbyService.setReady(msg.lobbyId, meId, msg.ready);
+  if (outs) {
+    for (const e of outs) rooms.broadcastToUsers(e.targets, e.payload);
   }
 }
-// ws_types.ts
-export type Incoming =
-  | { type: "ping" }
-  | { type: "subscribe"; chatId: number }
-  | { type: "unsubscribe"; chatId: number }
-  | { type: "typing"; chatId: number; isTyping: boolean }
-  | { type: "send"; chatId: number; body: string };
 
-export type Outgoing =
-  | { type: "ready"; userId: number }
-  | { type: "message"; chatId: number; message: any }
-  | { type: "typing"; chatId: number; userId: number; isTyping: boolean; at: string }
-  | { type: "presence"; userId: number; online: boolean }
-  | { type: "friend_request"; id: number; from_user_id: number; to_user_id: number }
-  | { type: "error"; code: string; message: string }
-  | { type: "pong"; at: string };
+function handleOFLobbyLeave(ws: WebSocket, rooms: Rooms, meId: number, msg: LWILeave) {
+  const res = lobbyService.leaveLobby(msg.lobbyId, meId);
+  if (res) {
+    rooms.broadcastToUsers(res.targets, res.payload);
+  }
+}
+
+/** -- MATCH */
+function handleOFMatchSubscribe(ws: WebSocket, rooms: Rooms, meId: number, msg: MWISubscribe) {}
+
+function handleOFMatchUnsubscribe(ws: WebSocket, rooms: Rooms, meId: number, msg: MWIUnsubscribe) {}
+
+function handleOFMatchInput(ws: WebSocket, rooms: Rooms, meId: number, msg: MWIInput) {}
+
+function handleOFMatchTogglePause(ws: WebSocket, rooms: Rooms, meId: number, msg: MWITogglePause) {}
+
+/** -- CHAT */
+function handleOFChatSubscribe(ws: WebSocket, rooms: Rooms, meId: number, msg: CWISubscribe) {
+  const chatId = msg.chatId;
+  if (!Number.isInteger(chatId) || chatId <= 0) throw err("CHAT_NOT_FOUND");
+  chatService.assertMembership(meId, chatId);
+  rooms.subscribeChatWs(msg.chatId, ws);
+}
+
+function handleOFChatUnsubscribe(ws: WebSocket, rooms: Rooms, meId: number, msg: CWIUnsubscribe) {
+  const chatId = msg.chatId;
+  if (!Number.isInteger(chatId) || chatId <= 0) return;
+  rooms.unsubscribeChatWs(chatId, ws);
+}
+
+function handleOFChatTyping(ws: WebSocket, rooms: Rooms, meId: number, msg: CWITyping) {
+  const chatId = msg.chatId;
+  if (!Number.isInteger(chatId) || chatId <= 0) throw err("CHAT_NOT_FOUND");
+  chatService.assertMembership(meId, chatId);
+  rooms.broadcastToChat(chatId, {
+    type: "chat_typing",
+    chatId,
+    userId: meId,
+    isTyping: !!msg.isTyping,
+    at: new Date().toISOString(),
+  } satisfies CWOTyping);
+}
+
+function handleOFChatSend(ws: WebSocket, rooms: Rooms, meId: number, msg: CWISend) {
+  if (!rateLimiterChats.allow(ws)) {
+    return safeSendJSON(ws, { type: "error", code: "RATE_LIMIT", message: "Too many messages" });
+  }
+
+  const chatId = msg.chatId;
+  if (!Number.isInteger(chatId) || chatId <= 0) throw err("CHAT_NOT_FOUND");
+
+  const saved = chatService.sendChatMessage(meId, chatId, msg.body);
+  chatService.assertMembership(meId, chatId);
+
+  rooms.broadcastToChat(chatId, { type: "chat_message", chatId, message: saved } satisfies CWOMessage);
+}

@@ -1,25 +1,8 @@
-// ws_types.ts
-import type { LobbySnapshot, UserStatus } from "../types/state_types";
+// backend/src/types/ws_types.ts
+import type { LobbySnapshot, MatchSettingsSnapshot, UserStatus } from "../types/state_types";
+import { MatchSnapshot, MatchState } from "../utils/GameTypes";
 
 export const MAX_JSON = 4 * 1024;
-
-export type MatchSettingsWire = {
-  pointsToWin: 3 | 5 | 7 | 9;
-  paddleSize: "small" | "medium" | "large";
-  freeMove: boolean;
-  mode: "2d"; // 3d later
-  hostSide: "left" | "right";
-};
-
-export function createDefaultSettingsWire(): MatchSettingsWire {
-  return {
-    pointsToWin: 3,
-    paddleSize: "medium",
-    freeMove: false,
-    mode: "2d",
-    hostSide: "left",
-  } as MatchSettingsWire;
-}
 
 // ===========================================================================
 // ===========================================================================
@@ -65,24 +48,23 @@ export type LWOInviteCanceled = { type: "lobby_invite_canceled"; inviteId: numbe
 export type LWOInviteExpired = { type: "lobby_invite_expired"; inviteId: number };
 export type LWOInviteResponse = { type: "lobby_invite_response"; inviteId: number; accepted: boolean };
 export type LWOInviteError = { type: "lobby_invite_error"; code: "target_busy" | "already_invited" | "invite_not_pending" | "rate_limited"; message?: string };
-export type LWOInviteSnapshot = { type: "lobby_snapshot"; matchId: number; lobbySnapshot: LobbySnapshot };
-export type LWOReady = { type: "lobby_ready"; matchId: number; userId: number; ready: boolean };
-export type LWOClosed = { type: "lobby_closed"; matchId: number };
+export type LWOLobbySnapshot = { type: "lobby_snapshot"; lobbyId: number; lobbySnapshot: LobbySnapshot };
+export type LWOClosed = { type: "lobby_closed"; lobbyId: number };
 
 /**
  *  Lobby outgoing WS messages types concatenated in one type
  */
-export type LobbyWsOutgoing = LWOInvite | LWOInviteCanceled | LWOInviteExpired | LWOInviteResponse | LWOInviteError | LWOInviteSnapshot | LWOReady | LWOClosed;
+export type LobbyWsOutgoing = LWOInvite | LWOInviteCanceled | LWOInviteExpired | LWOInviteResponse | LWOInviteError | LWOLobbySnapshot | LWOClosed;
 
 /**
  *  Lobby individual incoming WS messages types - one type defined per WS message type
  */
-export type LWIInviteSend = { type: "lobby_invite_send"; to: number };
+export type LWIInviteSend = { type: "lobby_invite_send"; from: number; to: number };
 export type LWIInviteCancel = { type: "lobby_invite_cancel"; inviteId: number };
 export type LWIInviteAnswer = { type: "lobby_invite_answer"; inviteId: number; accept: boolean };
-export type LWISetSettings = { type: "lobby_set_settings"; matchId: number; settings: any };
-export type LWIReady = { type: "lobby_ready"; matchId: number; ready: boolean };
-export type LWILeave = { type: "lobby_leave"; matchId: number };
+export type LWISetSettings = { type: "lobby_set_settings"; lobbyId: number; settings: MatchSettingsSnapshot };
+export type LWIReady = { type: "lobby_ready"; lobbyId: number; ready: boolean };
+export type LWILeave = { type: "lobby_leave"; lobbyId: number };
 
 /**
  *  Lobby incoming WS messages types concatenated in one type
@@ -96,36 +78,20 @@ export type LobbyWsIncoming = LWIInviteSend | LWIInviteCancel | LWIInviteAnswer 
 /**
  *  Match individual outgoing WS messages types - one type defined per WS message type
  */
-export type MWOCountDown = { type: "match_countdown"; matchId: number; seconds: number };
-export type MWOStart = { type: "match_start"; matchId: number; seed: number };
-export type MWOSnapshot = {
-  type: "match_snapshot";
-  matchId: number;
-  t: number;
-  state: {
-    ball: { x: number; y: number; vx: number; vy: number };
-    left: { x: number; y: number; vx: number; vy: number; score: number; id: number; name: string };
-    right: { x: number; y: number; vx: number; vy: number; score: number; id: number; name: string };
-    target: number;
-    freeMove: boolean;
-    paddleH: number;
-  };
-};
-export type MWOPaused = { type: "match_paused"; matchId: number };
-export type MWOResumed = { type: "match_resumed"; matchId: number };
-export type MWOOver = { type: "match_over"; matchId: number; winnerId: number; scoreL: number; scoreR: number };
+export type MWOCreated = { type: "match_created"; matchId: number; state: MatchState };
+export type MWOSnapshot = { type: "match_snapshot"; matchId: number; snapshot: MatchSnapshot };
 
 /**
  *  Match outgoing WS messages types concatenated in one type
  */
-export type MatchWsOutgoing = MWOCountDown | MWOStart | MWOSnapshot | MWOPaused | MWOResumed | MWOOver;
+export type MatchWsOutgoing = MWOCreated | MWOSnapshot;
 
 /**
  *  Match individual incoming WS messages types - one type defined per WS message type
  */
 export type MWISubscribe = { type: "match_subscribe"; matchId: number };
 export type MWIUnsubscribe = { type: "match_unsubscribe"; matchId: number };
-export type MWIInput = { type: "match_input"; matchId: number; key: "up" | "down" | "left" | "right"; pressed: boolean; at: number };
+export type MWIInput = { type: "match_input"; matchId: number; key: "up" | "down" | "left" | "right"; pressed: boolean };
 export type MWITogglePause = { type: "match_toggle_pause"; matchId: number };
 
 /**

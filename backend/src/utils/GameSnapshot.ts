@@ -1,7 +1,10 @@
 // src/helpers/GameSnapshot.ts
-import type { BallSnapshot, MatchState, PlayerSnapshot, SettingsSnapshot, MatchSnapshot } from "./GameTypes";
+import type { BallSnapshot, MatchRuntime, PlayerSnapshot, SettingsSnapshot, MatchSnapshot, RuntimeSnapshot } from "./GameTypes";
 
-export function matchStateToSnapshot(s: MatchState): MatchSnapshot {
+export function matchStateToSnapshot(m: MatchRuntime): MatchSnapshot {
+  const s = m.state;
+  const isCountdown = m.paused && m.resumeAtMs !== null;
+
   const ballSnapshot: BallSnapshot = {
     x: s.ball.area.x,
     y: s.ball.area.y,
@@ -37,11 +40,18 @@ export function matchStateToSnapshot(s: MatchState): MatchSnapshot {
     paddleHeight: s.paddleHeight,
   };
 
+  const runtimeSnapshot : RuntimeSnapshot = {
+	phase : !m.paused ? "playing" : isCountdown ? "countdown" : "paused",
+	countdownMs: isCountdown ? Math.max(0, m.resumeAtMs! - Date.now()) : undefined,
+	winner: 
+  }
+
   return {
     ball: ballSnapshot,
     leftP: leftPSnapshot,
     rightP: rightPSnapshot,
     settings: settingsSnapshot,
+	runtime: runtimeSnapshot,
   } as MatchSnapshot;
 }
 

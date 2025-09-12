@@ -3,7 +3,7 @@
 export type UserRow = { id: number; pseudo: string; avatar_url: string | null };
 export type PublicUser = { id: number; pseudo: string; avatar_url: string | null };
 
-export type UserStatus = "online" | "in_lobby" | "playing" | "offline" | "dnd";
+export type UserStatus = "available" | "in_lobby" | "playing" | "dnd";
 
 export type MatchRow = {
   id: number;
@@ -28,7 +28,7 @@ export type Settings = {
   me: UserRow;
   opponent: UserRow | null;
   pointsToWin: Points;
-  paddleSize: PaddleSizeKey;
+  paddleHeight: PaddleSizeKey;
   mySide: Side;
   freeMove: boolean;
   matchId: number | null;
@@ -36,20 +36,38 @@ export type Settings = {
 
 export type MatchSettingsSnapshot = {
   pointsToWin: 3 | 5 | 7 | 9;
-  paddleSize: "small" | "medium" | "large";
+  paddleHeight: "small" | "medium" | "large";
   freeMove: boolean;
   hostSide: "left" | "right";
 };
 
-export type Invite = {
+export function createDefaultMatchSettings(): MatchSettingsSnapshot {
+  return {
+    pointsToWin: 3,
+    paddleHeight: "medium",
+    freeMove: false,
+    hostSide: "left",
+  } satisfies MatchSettingsSnapshot;
+}
+
+export type LobbyUserSnapshot = {
+  userId: number;
+  status: UserStatus;
+};
+
+export type InviteState = "pending" | "canceled" | "expired" | "answered";
+
+export type InviteSnapshot = {
   id: number;
   from: number;
   to: number;
-  status: "pending" | "canceled" | "declined" | "accepted";
+  state: InviteState;
+  expiresAt: number;
+  timer: NodeJS.Timeout | null;
 };
 
 export type LobbySnapshot = {
-  matchId: number;
+  lobbyId: number;
   hostId: number;
   guestId: number;
   settings: MatchSettingsSnapshot;

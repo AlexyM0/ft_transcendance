@@ -1,4 +1,3 @@
-import { friends } from "./../store/friends.store";
 // src/api/friends.ts
 
 export type SearchHit = {

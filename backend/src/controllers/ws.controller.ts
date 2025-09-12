@@ -1,4 +1,4 @@
-//ws_controller.ts
+// backend/src/controllers/ws_controller.ts
 
 /**
  * WebSocket controller = tiny router for frames.
@@ -31,6 +31,7 @@ import type {
   SWOReady,
   SWOError,
   CWOPresence,
+  LWOInvite,
 } from "../types/ws_types";
 import { Rooms } from "../utils/ws_rooms";
 import { RateLimiter } from "../utils/ws_rateLimiter";
@@ -39,6 +40,8 @@ import { MAX_JSON } from "../types/ws_types";
 
 import * as chatService from "../services/chat.service";
 import * as friendsModel from "../models/friends.model";
+import * as lobbyService from "../services/lobby.service";
+import * as gameService from "../services/game.service";
 
 /* =========================================================== */
 /* =========================================================== */
@@ -76,6 +79,13 @@ export function wsController(ws: WebSocket, req: FastifyRequest) {
   /** -- Notify friends that i am online */
   void notifyMeOnlineToFriends(rooms, meId);
   void getMyOnlineFriends(ws, rooms, meId);
+
+  const { userId, status } = lobbyService.onUserConnected(meId);
+  rooms.broadcastToUsers([meId], { type: "user_status", userId, status });
+
+  lobbyService.setLobbyEmitter(({ targets, payload }) => {
+    rooms.broadcastToUsers(targets, payload);
+  });
 
   /** -- Handle ws interactions (incoming message or close signal) */
   ws.on("message", async (raw) => handlingWsOnMessage(raw, rooms, ws, meId));
@@ -131,6 +141,8 @@ async function handlingWsOnClose(rooms: Rooms, ws: WebSocket, meId: number) {
   rooms.removeUserSocket(meId, ws);
   rooms.cleanupSocket(ws);
 
+  lobbyService.onUserDisconnected(meId);
+
   try {
     const friendRows = friendsModel.listMyFriends(meId);
     const friendIds = friendRows.map((r) => r.friend_id);
@@ -158,7 +170,7 @@ async function onFrame(ws: WebSocket, rooms: Rooms, meId: number, msg: AllWsInco
       case "lobby_set_settings":
         return handleOFLobbySetSettings(ws, rooms, meId, msg);
       case "lobby_ready":
-        return handleOFLobbyReady(ws, rooms, meId, msg);
+        return handleOFMatchCreated(ws, rooms, meId, msg);
       case "lobby_leave":
         return handleOFLobbyLeave(ws, rooms, meId, msg);
 
@@ -193,26 +205,72 @@ function handleOFPing(ws: WebSocket, rooms: Rooms, meId: number, msg: SWIPing) {
 }
 
 /** -- LOBBY */
-function handleOFLobbyInviteSend(ws: WebSocket, rooms: Rooms, meId: number, msg: LWIInviteSend) {}
+function handleOFLobbyInviteSend(ws: WebSocket, rooms: Rooms, meId: number, msg: LWIInviteSend) {
+  const res = lobbyService.inviteSend(meId, msg.to);
+  if (!res) return;
+  rooms.broadcastToUsers(res.targets, res.payload);
+}
 
-function handleOFLobbyInviteCancel(ws: WebSocket, rooms: Rooms, meId: number, msg: LWIInviteCancel) {}
+function handleOFLobbyInviteCancel(ws: WebSocket, rooms: Rooms, meId: number, msg: LWIInviteCancel) {
+  const res = lobbyService.inviteCancel(meId, msg.inviteId);
+  if (!res) return;
+  rooms.broadcastToUsers(res.targets, res.payload);
+}
 
-function handleOFLobbyInviteAnswer(ws: WebSocket, rooms: Rooms, meId: number, msg: LWIInviteAnswer) {}
+function handleOFLobbyInviteAnswer(ws: WebSocket, rooms: Rooms, meId: number, msg: LWIInviteAnswer) {
+  const resInvite = lobbyService.inviteAnswer(meId, msg.inviteId, msg.accept);
+  if (!resInvite) return;
 
-function handleOFLobbySetSettings(ws: WebSocket, rooms: Rooms, meId: number, msg: LWISetSettings) {}
+  if (resInvite.payload.type === "lobby_invite_response" && msg.accept) {
+    const invFrom = resInvite.targets[0]!;
+    const invTo = resInvite.targets[1]!;
+    const resLobby = lobbyService.createLobby(invFrom, invTo);
+    rooms.broadcastToUsers(resInvite.targets, resInvite.payload);
+    rooms.broadcastToUsers(resLobby.targets, resLobby.payload);
+  } else {
+    rooms.broadcastToUsers(resInvite.targets, resInvite.payload);
+  }
+}
 
-function handleOFLobbyReady(ws: WebSocket, rooms: Rooms, meId: number, msg: LWIReady) {}
+function handleOFLobbySetSettings(ws: WebSocket, rooms: Rooms, meId: number, msg: LWISetSettings) {
+  const res = lobbyService.setSettings(msg.lobbyId, meId, msg.settings);
+  if (!res) return;
+  rooms.broadcastToUsers(res.targets, res.payload);
+}
 
-function handleOFLobbyLeave(ws: WebSocket, rooms: Rooms, meId: number, msg: LWILeave) {}
+function handleOFMatchCreated(ws: WebSocket, rooms: Rooms, meId: number, msg: LWIReady) {
+  const res = lobbyService.setReady(msg.lobbyId, meId, msg.ready);
+  if (!res) return;
+  rooms.broadcastToUsers(res.targets, res.payload);
+}
+
+function handleOFLobbyLeave(ws: WebSocket, rooms: Rooms, meId: number, msg: LWILeave) {
+  const res = lobbyService.leaveLobby(msg.lobbyId, meId);
+  if (res) {
+    rooms.broadcastToUsers(res.targets, res.payload);
+  }
+}
 
 /** -- MATCH */
-function handleOFMatchSubscribe(ws: WebSocket, rooms: Rooms, meId: number, msg: MWISubscribe) {}
+function handleOFMatchSubscribe(ws: WebSocket, rooms: Rooms, meId: number, msg: MWISubscribe) {
+  const ok = gameService.subscribe(msg.matchId, ws);
+  if (!ok) safeSendJSON(ws, { type: "error", code: "MATCH_NOT_FOUND", message: "No such match" } as SWOError);
+}
 
-function handleOFMatchUnsubscribe(ws: WebSocket, rooms: Rooms, meId: number, msg: MWIUnsubscribe) {}
+function handleOFMatchUnsubscribe(ws: WebSocket, rooms: Rooms, meId: number, msg: MWIUnsubscribe) {
+  gameService.unsubscribe(msg.matchId, ws);
+}
 
-function handleOFMatchInput(ws: WebSocket, rooms: Rooms, meId: number, msg: MWIInput) {}
+function handleOFMatchInput(ws: WebSocket, rooms: Rooms, meId: number, msg: MWIInput) {
+  if (!rateLimiterInputs.allow(ws)) {
+    return safeSendJSON(ws, { type: "error", code: "RATE_LIMIT", message: "Too many inputs" } as SWOError);
+  }
+  gameService.onInput(msg.matchId, meId, msg.key, !!msg.pressed);
+}
 
-function handleOFMatchTogglePause(ws: WebSocket, rooms: Rooms, meId: number, msg: MWITogglePause) {}
+function handleOFMatchTogglePause(ws: WebSocket, rooms: Rooms, meId: number, msg: MWITogglePause) {
+  gameService.togglePause(msg.matchId, meId);
+}
 
 /** -- CHAT */
 function handleOFChatSubscribe(ws: WebSocket, rooms: Rooms, meId: number, msg: CWISubscribe) {
