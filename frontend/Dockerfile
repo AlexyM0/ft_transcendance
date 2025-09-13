@@ -1,13 +1,13 @@
-FROM node:20-alpine AS build
-WORKDIR /web
-COPY package.json ./
-RUN npm install
-COPY . .
-RUN npm run build
-
+# frontend/Dockerfile
 FROM node:20-alpine
-WORKDIR /web
-RUN npm install -g serve
-COPY --from=build /web/dist .
-EXPOSE 80
-CMD ["serve", "-s", ".", "-l", "80"]
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+EXPOSE 5173
+
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

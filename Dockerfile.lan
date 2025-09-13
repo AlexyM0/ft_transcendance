@@ -1,0 +1,8 @@
+FROM node:18-alpine
+
+WORKDIR /app
+COPY lan-ws-server.js .
+RUN npm install ws
+
+EXPOSE 8081
+CMD ["node", "lan-ws-server.js"]
