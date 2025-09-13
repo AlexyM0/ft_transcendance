@@ -44,8 +44,13 @@ function NavLinkIcon(label: string, href: string, faClass: string) {
   /**
    * Initial active state
    */
+  const isActive = (path: string, link: string) => {
+    return path === link || path.startsWith(link + "/");
+  };
+
   const setActive = () => {
-    const active = currentPath() === href;
+    const path = currentPath();
+    const active = isActive(path, href);
     a.classList.toggle("text-teal-600", active);
     text.classList.toggle("font-semibold", active);
   };
@@ -167,13 +172,13 @@ const TopBar = (me: PublicUser) => {
   );
 
   // User avatar (click → profile)
-  const avatarBtn = ImageButton(me.avatar_url || "/user.png", "Avatar", {
+  const avatarBtn = ImageButton(me.avatar_url || "/user.png", me.pseudo, {
     onClick: () => (location.hash = "/profile"),
     size: 32,
     variant: "circle",
   });
 
-  mount(actions, searchHost, langBtn, avatarBtn);
+  mount(actions, searchHost, /*langBtn,*/ avatarBtn);
   mount(row, title, actions);
   wrap.appendChild(row);
 
