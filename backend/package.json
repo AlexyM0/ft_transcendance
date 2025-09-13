@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "dbmigrate": "ts-node db/migrate.ts",
     "dev": "nodemon --watch 'src/**/*.ts' --exec 'ts-node' src/index.ts",
+    "dbmigrate": "ts-node db/migrate.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "node --exec 'ts-node' src/utils/crypto.ts"

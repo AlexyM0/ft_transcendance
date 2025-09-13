@@ -18,7 +18,7 @@ const isProd = process.env.NODE_ENV === "production";
  * Build a list of “origins” (frontend URLs) that are allowed to call your backend.
  */
 // const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || "http://localhost:5173").split(",").map((s) => s.trim());
-const ALLOWED_ORIGINS = [process.env.CORS_ORIGINS, "http://localhost:5173", "http://192.168.1.20:5173"];
+const ALLOWED_ORIGINS = [process.env.CORS_ORIGINS, "http://localhost:5173", "http://10.12.4.10:5173"];
 
 async function corsPlugin(fastify: FastifyInstance) {
   await fastify.register(cors, {

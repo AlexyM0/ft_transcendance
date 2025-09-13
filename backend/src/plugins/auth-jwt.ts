@@ -32,10 +32,10 @@ const issueSessionCookie = async function (rep: FastifyReply, payload: Record<st
   console.log("Session cookie : ", token);
   rep.setCookie(SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: isProd || CROSS_SITE_COOKIES,
-    sameSite: CROSS_SITE_COOKIES ? ("none" as const) : ("strict" as const),
-    // sameSite: "lax",
-    // secure: false,
+    // secure: isProd || CROSS_SITE_COOKIES,
+    // sameSite: CROSS_SITE_COOKIES ? ("none" as const) : ("strict" as const),
+    sameSite: "lax",
+    secure: false,
     path: "/",
     maxAge: 4 * 60 * 60,
   });
@@ -48,10 +48,10 @@ const issuePendingCookie = async function (rep: FastifyReply, payload: Record<st
 
   rep.setCookie(PENDING_COOKIE, token, {
     httpOnly: true,
-    secure: isProd || CROSS_SITE_COOKIES,
-    sameSite: CROSS_SITE_COOKIES ? ("none" as const) : ("strict" as const),
-    // sameSite: "lax",
-    // secure: false,
+    // secure: isProd || CROSS_SITE_COOKIES,
+    // sameSite: CROSS_SITE_COOKIES ? ("none" as const) : ("strict" as const),
+    sameSite: "lax",
+    secure: false,
     path: "/",
     maxAge: 5 * 60,
   });

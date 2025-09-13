@@ -16,7 +16,7 @@ db.pragma("foreign_keys = ON");
 const start = async () => {
   try {
     await fastify.listen({ port: 5000, host: "0.0.0.0" });
-    console.log("Backend server running at http://localhost:5000");
+    console.log("Backend server running at http://0.0.0.0:5000");
   } catch (e) {
     console.log(e);
     process.exit(1);

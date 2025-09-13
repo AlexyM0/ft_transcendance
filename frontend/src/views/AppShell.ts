@@ -130,7 +130,7 @@ const TopBar = (me: PublicUser) => {
 
   // Search controls
   const searchHost = domElem("div", { class: "relative" });
-  const searchBtn = IconButton("fa-magnifying-glass", "Search users", openSearch);
+  // const searchBtn = IconButton("fa-magnifying-glass", "Search users", openSearch);
 
   const inputWrap = domElem("div", { class: "md:w-80 w-64 relative z-10" });
   const input = domElem("input", {
@@ -186,25 +186,9 @@ const TopBar = (me: PublicUser) => {
   let open = false;
   let inflight: AbortController | null = null;
 
-  function setSearchBtnVisible(v: boolean) {
-    const btn = (searchBtn.matches("button") ? searchBtn : searchBtn.querySelector("button")) as HTMLElement | null;
-    const target = btn ?? searchBtn;
-    target.style.display = v ? "" : "none";
-  }
-
-  function openSearch() {
-    open = true;
-    setSearchBtnVisible(false);
-    inputWrap.classList.remove("hidden");
-    input.value = "";
-    setDropdownVisible(false);
-    setTimeout(() => input.focus(), 0);
-  }
-
   function closeSearch() {
     open = false;
     inputWrap.classList.add("hidden");
-    setSearchBtnVisible(true);
 
     setDropdownVisible(false);
     if (inflight) {

@@ -88,7 +88,7 @@ export function MatchLocalView(root: HTMLElement) {
   });
 
   /** -- Keyboard mapping to inputs */
-  const leftKeys = { up: "z", down: "s", left: "q", right: "d" };
+  const leftKeys = { up: "w", down: "s", left: "a", right: "d" };
   const rightKeys = { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" };
 
   const keyDownHandler = (e: KeyboardEvent) => {

@@ -164,7 +164,7 @@ export function MatchOnlineView(root: HTMLElement) {
   rt.connect();
 
   /** -- Keyboard mapping to inputs */
-  const leftKeys = { up: "z", down: "s", left: "q", right: "d" };
+  const leftKeys = { up: "w", down: "s", left: "a", right: "d" };
   const rightKeys = { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" };
   const findKey = (map: Record<string, string>, key: string) => (Object.entries(map).find(([, k]) => k === key)?.[0] as keyof typeof map | undefined) ?? undefined;
   const localInputs: Record<InputKeys, boolean> = { up: false, down: false, left: false, right: false };
