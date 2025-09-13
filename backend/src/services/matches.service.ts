@@ -2,6 +2,7 @@
 import * as matchesModel from "../models/matches.model";
 import * as usersModel from "../models/users.model";
 import * as userStatsModel from "../models/user_stats.model";
+import * as gameService from "./game.service";
 import { withTx } from "../utils/db";
 import { err } from "../utils/errors";
 
@@ -56,6 +57,18 @@ export function cancelMatch(meId: number, matchId: number) {
   const match = matchesModel.getMatch(matchId);
   if (!match) throw err("MATCH_NOT_FOUND");
   if (meId !== match.p1_id && meId !== match.p2_id) throw err("FORBIDDEN");
+
+  const updated = matchesModel.cancelMatch(matchId);
+  if (!updated) throw err("NOT_PENDING");
+  return updated;
+}
+
+export function cancelOnlineMatch(meId: number, matchId: number) {
+  const match = matchesModel.getMatch(matchId);
+  if (!match) throw err("MATCH_NOT_FOUND");
+  if (meId !== match.p1_id && meId !== match.p2_id) throw err("FORBIDDEN");
+
+  gameService.cancelMatch(meId, matchId);
 
   const updated = matchesModel.cancelMatch(matchId);
   if (!updated) throw err("NOT_PENDING");

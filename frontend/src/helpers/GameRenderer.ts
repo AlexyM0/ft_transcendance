@@ -18,7 +18,8 @@ export class GameRenderer {
   countdown: number | null = null;
   paused = true;
   over = false;
-  winnerName: string | null = null;
+  //   winnerName: string | null = null;
+  overMessage: string | null = null;
 
   constructor(private wrap: HTMLElement, private canvas: HTMLCanvasElement, private header: HTMLElement) {
     const ctx = canvas.getContext("2d");
@@ -50,9 +51,9 @@ export class GameRenderer {
     this.paused = p;
   }
 
-  setOver(name: string | null) {
-    this.over = !!name;
-    this.winnerName = name;
+  setOver(overMessage: string | null) {
+    this.over = !!overMessage;
+    this.overMessage = overMessage;
   }
 
   draw(s: MatchState) {
@@ -129,7 +130,7 @@ export class GameRenderer {
 
     // Overlay
     if (this.paused || this.countdown || this.over) {
-      const msg = this.countdown ? String(this.countdown) : this.over ? `Winner: ${this.winnerName ?? ""}` : "Paused";
+      const msg = this.countdown ? String(this.countdown) : this.over ? this.overMessage ?? "" : "Paused";
 
       const { width: pxW, height: pxH } = this.canvas;
 

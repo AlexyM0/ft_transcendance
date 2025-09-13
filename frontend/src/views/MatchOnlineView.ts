@@ -1,17 +1,14 @@
 // src/views/MatchLocalView.ts
 import { domElem as h, mount } from "../ui/DomElement";
 import { GameRenderer } from "../helpers/GameRenderer";
-import { GameLocalDriver } from "../helpers/GameLocalDriver";
-import { createGameLocalState } from "../helpers/GameLocalState";
-import type { Settings } from "./PlayLocalView";
-import type { MatchSettings, MatchSnapshot, MatchState, Side } from "../helpers/GameTypes";
+import type { InputKeys, MatchSnapshot, MatchState, Side } from "../helpers/GameTypes";
 import { Avatar } from "../ui/Avatar";
-import * as http from "../api/http";
 import { Realtime } from "../helpers/ws";
 import type { AllWsIncoming, MWOInput, MWOTogglePause } from "../helpers/ws_types";
-import { applySnapshotToMatch } from "../helpers/GameSnapshot";
-import { auth } from "../store/auth.store";
+import { maybeExtrapolateBallOnly, pickRenderSnapshot, predictMyPaddle, pushSnapshot, type TimedSnap } from "../helpers/GameSnapshot";
 import { createGameOnlineState } from "../helpers/GameOnlineState";
+import * as http from "../api/http";
+import { auth } from "../store/auth.store";
 
 export function MatchOnlineView(root: HTMLElement) {
   /** -- Config settings from PlayView */
@@ -26,13 +23,42 @@ export function MatchOnlineView(root: HTMLElement) {
   const state: MatchState = createGameOnlineState(matchId, snapshot);
 
   /** -- DOM elements */
-  const wrap = h("div", { class: "flex-1 min-h-0 grid place-items-center bg-emerald-50" });
-  const canvas = h("canvas", { class: "block rounded-md shadow border border-emerald-100 bg-white" }) as HTMLCanvasElement;
+  const viewWrap = h("div", { class: "flex flex-col gap-10 items-center" });
+  const canvasHeaderWrap = h("div", { class: "w-full" });
   const header = h("div", { class: "h-16 px-4 border-b border-emerald-100 bg-emerald-50/70 flex items-center justify-between" });
-  mount(root, header, mount(wrap, canvas));
+  const canvasWwrap = h("div", { class: "flex-1 min-h-0 grid place-items-center bg-emerald-50" });
+  const canvas = h("canvas", { class: "block rounded-md shadow border border-emerald-100 bg-white" }) as HTMLCanvasElement;
+  const quitBtn = h("button", { class: "px-6 py-2 bg-emerald-700 rounded rounded-lg flex flex-row gap-4 items-center text-white text-lg font-semibold hover:bg-emerald-400" });
+  const quitIcon = h("i", { class: "fa-solid fa-xmark" });
+  const quitText = h("span", { text: "Quit game" });
+  quitBtn.append(quitIcon, quitText);
+
+  canvasWwrap.appendChild(canvas);
+  canvasHeaderWrap.append(header, canvasWwrap);
+  viewWrap.append(canvasHeaderWrap, quitBtn);
+  root.append(viewWrap);
+
+  /** -- Quit btn behaviour */
+  async function quitLocal() {
+    sessionStorage.removeItem("play:online:current");
+    location.hash = "/play";
+  }
+
+  quitBtn.addEventListener("click", async () => {
+    if (state.phase === "over") {
+      await quitLocal();
+      return;
+    }
+    try {
+      await http.putRequest(`/api/matches/${matchId}/cancel/online`);
+    } catch (e) {
+    } finally {
+      await quitLocal();
+    }
+  });
 
   /** -- Game Settings */
-  const renderer = new GameRenderer(wrap, canvas, header);
+  const renderer = new GameRenderer(canvasWwrap, canvas, header);
   renderer.setBallSprite("/ball.png");
 
   /** -- DOM Elements - Header content set with game settings */
@@ -73,38 +99,75 @@ export function MatchOnlineView(root: HTMLElement) {
       case "over":
         renderer.setPaused(true);
         renderer.setCountdown(null);
-        renderer.setOver(state.winner?.name ?? null);
+        renderer.setOver(state.winner ? `Winner ${state.winner?.name ?? ""}` : null);
+        sessionStorage.removeItem("play:online:current");
         break;
     }
   };
+
+  /** Drawing smooth */
+  const snaps: TimedSnap[] = []; // tiny buffer; we’ll keep ~2–5 items max
+  const drawState: MatchState = JSON.parse(JSON.stringify(state)) as MatchState;
+  const INTERP_DELAY_MS = 100; // small playback delay to absorb jitter
+  const MAX_EXTRAP_MS = 100; // clamp extrapolation for safety
 
   /** -- Game driver */
   const rt = new Realtime("/api/ws");
   const stop = rt.on((msg: AllWsIncoming) => {
     if (msg.type === "ready") {
       rt.send({ type: "match_subscribe", matchId });
-      // optional: kick off countdown if initial phase is paused
-      rt.send({ type: "match_toggle_pause", matchId } satisfies MWOTogglePause);
-      return; // don't fall through on the same frame
+      return;
     }
 
     if (msg.type === "match_snapshot" && msg.matchId === matchId) {
-      applySnapshotToMatch(state, msg.snapshot); // must set state.phase/pauseCooldownAt/winner from snapshot.runtime
-      leftInfoScore.textContent = String(state.leftP.score);
-      rightInfoScore.textContent = String(state.rightP.score);
-      leftInfoName.textContent = state.leftP.name;
-      rightInfoName.textContent = state.rightP.name;
-      syncOverlayFromState();
+      pushSnapshot(msg.snapshot, snaps);
+      leftInfoScore.textContent = String(msg.snapshot.leftP.score);
+      rightInfoScore.textContent = String(msg.snapshot.rightP.score);
+
+      const r = msg.snapshot.runtime;
+      if (r.phase === "playing") {
+        renderer.setPaused(false);
+        renderer.setCountdown(null);
+        renderer.setOver(null);
+      } else if (r.phase === "countdown") {
+        const secs = r.pauseCooldownAt ? Math.max(0, Math.ceil((r.pauseCooldownAt - Date.now()) / 1000)) : 0;
+        renderer.setPaused(true);
+        renderer.setCountdown(secs);
+        renderer.setOver(null);
+      } else if (r.phase === "paused") {
+        renderer.setPaused(true);
+        renderer.setCountdown(null);
+        renderer.setOver(null);
+      } else {
+        // r.phase === "over"
+        state.phase = "over";
+        state.winner = r.winner;
+        renderer.setPaused(true);
+        renderer.setCountdown(null);
+        renderer.setOver(state.winner ? `Winner ${state.winner?.name ?? ""}` : null);
+        sessionStorage.removeItem("play:local:current");
+      }
+    } else if (msg.type === "match_canceled" && msg.matchId === matchId) {
+      if (msg.quitterId !== auth.get().meId) {
+        renderer.setPaused(true);
+        renderer.setCountdown(null);
+        renderer.setOver(`${msg.quitterName} left the game`);
+
+        window.removeEventListener("keydown", keyDownHandler);
+        window.removeEventListener("keyup", keyUpHandler);
+
+        quitText.textContent = "Back to menu";
+      }
     }
   });
 
   rt.connect();
-  rt.send({ type: "match_subscribe", matchId });
 
   /** -- Keyboard mapping to inputs */
   const leftKeys = { up: "z", down: "s", left: "q", right: "d" };
   const rightKeys = { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" };
   const findKey = (map: Record<string, string>, key: string) => (Object.entries(map).find(([, k]) => k === key)?.[0] as keyof typeof map | undefined) ?? undefined;
+  const localInputs: Record<InputKeys, boolean> = { up: false, down: false, left: false, right: false };
 
   const keyDownHandler = (e: KeyboardEvent) => {
     if (e.key === " " && !e.repeat) {
@@ -116,6 +179,7 @@ export function MatchOnlineView(root: HTMLElement) {
     const map = mySide === "left" ? leftKeys : rightKeys;
     const k = findKey(map as any, e.key);
     if (k) {
+      localInputs[k as InputKeys] = true;
       rt.send({ type: "match_input", matchId, key: k as "up" | "down" | "left" | "right", pressed: true } satisfies MWOInput);
       e.preventDefault();
     }
@@ -125,6 +189,7 @@ export function MatchOnlineView(root: HTMLElement) {
     const map = mySide === "left" ? leftKeys : rightKeys;
     const k = findKey(map as any, e.key);
     if (k) {
+      localInputs[k as InputKeys] = false;
       rt.send({ type: "match_input", matchId, key: k as "up" | "down" | "left" | "right", pressed: false } satisfies MWOInput);
       e.preventDefault();
     }
@@ -137,14 +202,35 @@ export function MatchOnlineView(root: HTMLElement) {
   syncOverlayFromState();
   renderer.draw(state);
 
-  // Draw loop just for smooth visuals between snapshots (optional)
+  // Draw loop just for smooth visuals between snapshots
+
   let raf = 0;
+  let lastFrameMs = performance.now();
+
   const drawLoop = () => {
-    if (state.phase === "countdown") {
-      const secs = state.pauseCooldownAt ? Math.max(0, Math.ceil((state.pauseCooldownAt - Date.now()) / 1000)) : 0;
-      renderer.setCountdown(secs);
+    const wallNowMs = Date.now();
+    const frameNow = performance.now();
+    let dtSec = (frameNow - lastFrameMs) / 1000;
+    lastFrameMs = frameNow;
+
+    // Clamp dt to avoid huge jumps when tab was hidden or frame hiccups
+    if (!Number.isFinite(dtSec)) dtSec = 0;
+    dtSec = Math.min(Math.max(dtSec, 0), 0.05); // 0..50ms
+
+    const had = pickRenderSnapshot(wallNowMs, state, snaps, drawState);
+    if (!had) {
+      // nothing to interpolate yet; draw authoritative state
+      renderer.draw(state);
+    } else {
+      // optional tiny extrapolation if we've outrun the buffer
+      maybeExtrapolateBallOnly(wallNowMs - INTERP_DELAY_MS, snaps, drawState);
+      predictMyPaddle(drawState, mySide, localInputs, dtSec);
+      if (drawState.phase === "countdown" && drawState.pauseCooldownAt) {
+        const secs = Math.max(0, Math.ceil((drawState.pauseCooldownAt - Date.now()) / 1000));
+        renderer.setCountdown(secs);
+      }
+      renderer.draw(drawState);
     }
-    renderer.draw(state);
     raf = requestAnimationFrame(drawLoop);
   };
   raf = requestAnimationFrame(drawLoop);

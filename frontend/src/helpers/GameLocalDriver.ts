@@ -2,6 +2,7 @@
 import { step } from "./GamePhysics";
 import type { InputKeys, MatchState, Side } from "./GameTypes";
 import { GameRenderer } from "./GameRenderer";
+import { resetPlayerPositions } from "./GameLocalState";
 
 export function GameLocalDriver(
   renderer: GameRenderer,
@@ -36,7 +37,7 @@ export function GameLocalDriver(
       case "over": {
         renderer.setPaused(true);
         renderer.setCountdown(null);
-        renderer.setOver(state.winner?.name ?? null);
+        renderer.setOver(state.winner?.name ? `Winner ${state.winner?.name ?? ""}` : null);
       }
     }
   }
@@ -63,6 +64,7 @@ export function GameLocalDriver(
         const s = Math.min(sub, remaining);
         const scorer = step(state, s);
         if (scorer) {
+          resetPlayerPositions(state);
           options?.onScore?.(state.leftP.score, state.rightP.score);
           const over = state.leftP.score >= state.pointsToWin || state.rightP.score >= state.pointsToWin;
           if (over) {

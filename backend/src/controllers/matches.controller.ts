@@ -49,6 +49,16 @@ export async function cancelMatch(req: FastifyRequest, rep: FastifyReply) {
   return rep.send(updated);
 }
 
+export async function cancelOnlineMatch(req: FastifyRequest, rep: FastifyReply) {
+  const meId = Number((req.user as any).sub);
+  const matchId = toInt((req.params as any).matchId);
+
+  if (!Number.isInteger(matchId) || matchId <= 0) throw err("BAD_MATCH_ID");
+
+  const updated = matchesService.cancelOnlineMatch(meId, matchId);
+  return rep.send(updated);
+}
+
 export async function listAllMatches(req: FastifyRequest, rep: FastifyReply) {
   const rows = matchesService.listAllMatches();
   return rep.send(rows);

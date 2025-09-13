@@ -19,13 +19,24 @@ export function MatchLocalView(root: HTMLElement) {
   const configSettings: Settings = JSON.parse(raw);
 
   /** -- DOM elements */
-  const wrap = h("div", { class: "flex-1 min-h-0 grid place-items-center bg-emerald-50" });
-  const canvas = h("canvas", { class: "block rounded-md shadow border border-emerald-100 bg-white" }) as HTMLCanvasElement;
+  const viewWrap = h("div", { class: "flex flex-col gap-10 items-center" });
+  const canvasHeaderWrap = h("div", { class: "w-full" });
   const header = h("div", { class: "h-16 px-4 border-b border-emerald-100 bg-emerald-50/70 flex items-center justify-between" });
-  mount(root, header, mount(wrap, canvas));
+  const canvasWwrap = h("div", { class: "flex-1 min-h-0 grid place-items-center bg-emerald-50" });
+  const canvas = h("canvas", { class: "block rounded-md shadow border border-emerald-100 bg-white" }) as HTMLCanvasElement;
+  const quitBtn = h("button", { class: "px-6 py-2 bg-emerald-700 rounded rounded-lg flex flex-row gap-4 items-center text-white text-lg font-semibold hover:bg-emerald-400" });
+  const quitIcon = h("i", { class: "fa-solid fa-xmark" });
+  const quitText = h("span", { text: "Quit game" });
+  quitBtn.append(quitIcon, quitText);
+
+  canvasWwrap.appendChild(canvas);
+  canvasHeaderWrap.append(header, canvasWwrap);
+  viewWrap.append(canvasHeaderWrap, quitBtn);
+  root.append(viewWrap);
+  //   mount(root, header, mount(wrap, canvas));
 
   /** -- Game Settings */
-  const renderer = new GameRenderer(wrap, canvas, header);
+  const renderer = new GameRenderer(canvasWwrap, canvas, header);
   renderer.setBallSprite("/ball.png");
 
   const matchSettings: MatchSettings = {
@@ -57,6 +68,13 @@ export function MatchLocalView(root: HTMLElement) {
 
   mount(header, leftInfoWrap, rightInfoWrap);
 
+  /** -- DOM Elements - Wire Quit btn to API */
+  quitBtn.addEventListener("click", async () => {
+    await http.putRequest(`/api/matches/${state.matchId}/cancel`);
+    sessionStorage.removeItem("play:local:current");
+    location.hash = "/play";
+  });
+
   /** -- Game driver */
   const driver = GameLocalDriver(renderer, state, {
     onScore: (leftScore, rightScore) => {
@@ -75,7 +93,6 @@ export function MatchLocalView(root: HTMLElement) {
 
   const keyDownHandler = (e: KeyboardEvent) => {
     if (e.key === " " && !e.repeat) {
-      console.log("hihi space pressed");
       driver.togglePause();
       e.preventDefault();
       return;

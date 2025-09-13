@@ -41,6 +41,7 @@ export function matchStateToSnapshot(s: MatchState): MatchSnapshot {
     phase: s.phase,
     pauseCooldownAt: s.pauseCooldownAt ?? null,
     winner: s.winner ?? null,
+    serverTimeMs: Date.now(),
   };
 
   return {

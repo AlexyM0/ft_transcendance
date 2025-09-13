@@ -80,11 +80,12 @@ export type LobbyWsIncoming = LWIInviteSend | LWIInviteCancel | LWIInviteAnswer 
  */
 export type MWOCreated = { type: "match_created"; matchId: number; side: Side; snapshot: MatchSnapshot };
 export type MWOSnapshot = { type: "match_snapshot"; matchId: number; snapshot: MatchSnapshot };
+export type MWOCanceled = { type: "match_canceled"; matchId: number; quitterId: number; quitterName: string };
 
 /**
  *  Match outgoing WS messages types concatenated in one type
  */
-export type MatchWsOutgoing = MWOCreated | MWOSnapshot;
+export type MatchWsOutgoing = MWOCreated | MWOSnapshot | MWOCanceled;
 
 /**
  *  Match individual incoming WS messages types - one type defined per WS message type

@@ -157,6 +157,7 @@ export type RuntimeSnapshot = {
   phase: MatchPhase;
   pauseCooldownAt?: number | null;
   winner?: { id: number; name: string } | null;
+  serverTimeMs?: number;
 };
 
 export type MatchSnapshot = {

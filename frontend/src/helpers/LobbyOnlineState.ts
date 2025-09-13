@@ -148,8 +148,9 @@ function onWs(msg: AllWsIncoming) {
 
     case "match_created": {
       if (state.lobbySnapshot) {
-        state.lobbySnapshot.locked = true;
+        // state.lobbySnapshot.locked = true;
         sessionStorage.setItem(`play:online:current`, JSON.stringify({ matchId: msg.matchId, side: msg.side, snapshot: msg.snapshot }));
+        Lobbies.resetLobby();
         location.hash = `/play/online/m`;
       }
       emit();
@@ -283,6 +284,19 @@ export const Lobbies = {
     const lobbyId = state.lobbySnapshot?.lobbyId;
     if (!lobbyId) return;
     realtime.send({ type: "lobby_leave", lobbyId } as LWOLeave);
+  },
+
+  resetLobby() {
+    state.meId = null;
+    state.opponent = null;
+    state.settings = { ...defaultSettings };
+    state.outgoing = null;
+    state.inboxQueue = [];
+    state.activeIncoming = null;
+    state.userStatus = {};
+    state.lobbySnapshot = null;
+    state.loading = false;
+    state.error = null;
   },
 
   /** Read helpers for the view */

@@ -2,6 +2,8 @@
 import { WORLD_W, WORLD_H, PADDLE_WIDTH, PADDLE_HEIGHTS } from "./GameConstants";
 import type { MatchSettings, MatchState, PlayerState, BallState, Side } from "./GameTypes";
 
+const margin = 18;
+
 export function createGameOnlineState(
   matchId: number,
   me: { id: number; name: string; avatar_url: string | null },
@@ -10,7 +12,6 @@ export function createGameOnlineState(
   settings: MatchSettings
 ): MatchState {
   const paddleHeight = PADDLE_HEIGHTS[settings.paddleHeight];
-  const margin = 18;
   const midY = (WORLD_H - paddleHeight) / 2;
   const half = WORLD_W / 2;
   const marginFreeMove = 10;
@@ -100,4 +101,13 @@ export function createGameOnlineState(
   };
 
   return matchState;
+}
+
+export function resetPlayerPositions(state: MatchState) {
+  const midY = (WORLD_H - state.paddleHeight) / 2;
+
+  state.leftP.paddle.x = margin;
+  state.leftP.paddle.y = midY;
+  state.rightP.paddle.x = WORLD_W - margin - PADDLE_WIDTH;
+  state.rightP.paddle.y = midY;
 }

@@ -3,16 +3,16 @@ import type { WebSocket } from "ws";
 import { step } from "../utils/GamePhysics";
 import { matchStateToSnapshot } from "../utils/GameSnapshot";
 import type { MatchState, MatchRuntime, InputKeys, Side, MatchSettings, MatchSnapshot } from "../utils/GameTypes";
-import { createGameOnlineState } from "../utils/GameOnlineState";
-import { MWOSnapshot } from "../types/ws_types";
-import { run } from "node:test";
+import { createGameOnlineState, resetPlayerPositions } from "../utils/GameOnlineState";
+import { AllWsOutgoing, MWOCanceled, MWOSnapshot } from "../types/ws_types";
+import * as matchService from "../services/matches.service";
 
 /** Data structure */
 const matches = new Map<number, MatchRuntime>();
 
 /** Rates */
 const SIM_DT = 1 / 240; // physics tick (s)
-const SNAPSHOT_HZ = 20; // send to clients
+const SNAPSHOT_HZ = 30; // send to clients
 const SNAPSHOT_EVERY = Math.round(1 / SIM_DT / SNAPSHOT_HZ); // 12
 
 /* ========== Broadcast helpers ========== */
@@ -20,6 +20,10 @@ function safeSend(ws: WebSocket, payload: any) {
   try {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(payload));
   } catch {}
+}
+
+function broadcast(m: MatchRuntime, payload: AllWsOutgoing) {
+  for (const ws of m.subs) safeSend(ws, payload);
 }
 
 function broadcastSnapshot(m: MatchRuntime) {
@@ -69,6 +73,16 @@ export function destroyMatch(matchId: number) {
   if (!m) return;
   if (m.raf) clearInterval(m.raf);
   matches.delete(matchId);
+}
+
+export function cancelMatch(meId: number, matchId: number) {
+  const m = matches.get(matchId);
+  if (!m) return null;
+
+  const quitterName = m.players.left.userId === meId ? m.state.leftP.name : m.state.rightP.name;
+  broadcast(m, { type: "match_canceled", matchId, quitterId: meId, quitterName } satisfies MWOCanceled);
+  destroyMatch(matchId);
+  return quitterName;
 }
 
 export function getSnapshot(matchId: number): MatchSnapshot | null {
@@ -163,13 +177,14 @@ function startLoop(m: MatchRuntime) {
         steps++;
 
         if (scorer) {
+          resetPlayerPositions(m.state);
           const over = m.state.leftP.score >= m.state.pointsToWin || m.state.rightP.score >= m.state.pointsToWin;
           if (over) {
             const winner = m.state.leftP.score > m.state.rightP.score ? m.state.leftP : m.state.rightP;
             s.phase = "over";
             s.pauseCooldownAt = null;
             s.winner = { id: winner.id, name: winner.name };
-            // Persist result (http/db) via the existing REST service
+            matchService.recordResult(m.state.matchId, m.state.leftP.score, m.state.rightP.score);
           } else {
             s.phase = "paused";
             s.pauseCooldownAt = null;

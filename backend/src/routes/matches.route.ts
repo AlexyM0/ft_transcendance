@@ -7,5 +7,6 @@ export const matchesRoutes: FastifyPluginAsync = async function (fastify: Fastif
   fastify.get("/:matchId", matchesController.getMatchDetails); // Get match details
   fastify.put("/:matchId/result", matchesController.recordMatchResult); // Record/update result
   fastify.put("/:matchId/cancel", matchesController.cancelMatch);
+  fastify.put("/:matchId/cancel/online", matchesController.cancelOnlineMatch);
   fastify.get("/all", matchesController.listAllMatches);
 };
