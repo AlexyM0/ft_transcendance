@@ -1,18 +1,5 @@
 #!/usr/bin/env node
-// lan-ws-server.js
-//
-// Petit serveur LAN WebSocket pour Pong
-// Usage : node lan-ws-server.js
-// Besoin : npm install ws
-//
-// Fonctionnalités :
-// - Chaque client reçoit { type: "ready", userId }
-// - Deux clients en attente sont automatiquement pairés en match
-// - Envoi { type: "match_created", matchId, side, snapshot }
-// - Simulation physique simple serveur-side (60 FPS)
-// - Diffuse { type: "match_snapshot" }
-// - Traite les inputs { type: "match_input" }
-// - En cas de déco, envoie { type: "match_canceled" }
+// lan == remote
 
 const WebSocket = require("ws");
 
