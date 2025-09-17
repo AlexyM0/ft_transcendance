@@ -18,7 +18,7 @@ async function fileUploadPlugin(fastify: FastifyInstance) {
 
   await fastify.register(fastifyStatic, {
     root: path.join(process.cwd(), "uploads"),
-    prefix: "/uploads/",
+    prefix: "/api/uploads/",
     decorateReply: false,
   });
 }

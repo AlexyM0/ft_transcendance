@@ -3,8 +3,6 @@ import { domElem as h, mount } from "../ui/DomElement";
 import { Avatar } from "../ui/Avatar";
 import { searchUsers, type SearchHit } from "../api/friends";
 
-const stockAvatar = "/user.png";
-
 /* =========================================================
    Types (UI-only; pure dummy data, no API)
 ========================================================= */
@@ -15,11 +13,7 @@ type Player = {
   nick: string;
 };
 
-type Source =
-  | { kind: "player"; playerId: number }
-  | { kind: "winner"; fromMatchId: number }
-  | { kind: "bye" }
-  | { kind: "tbd" };
+type Source = { kind: "player"; playerId: number } | { kind: "winner"; fromMatchId: number } | { kind: "bye" } | { kind: "tbd" };
 
 type MatchStatus = "pending" | "ready" | "in_progress" | "completed";
 type Match = {
@@ -128,9 +122,7 @@ function seedBracket(players: Player[]): Bracket {
 function resolveSource(src: Source, bracket: Bracket): Source {
   if (src.kind !== "winner") return src;
   const m = findMatch(bracket, src.fromMatchId);
-  return m?.winnerId
-    ? { kind: "player", playerId: m.winnerId }
-    : { kind: "tbd" };
+  return m?.winnerId ? { kind: "player", playerId: m.winnerId } : { kind: "tbd" };
 }
 
 function findMatch(bracket: Bracket, id: number): Match | null {
@@ -237,12 +229,7 @@ function nameOf(players: Player[], id: number | null | undefined) {
 ========================================================= */
 const LS_KEY = "pong_tournament_v1";
 
-function saveState(state: {
-  players: Player[];
-  bracket: Bracket | null;
-  selectedMatchId: number | null;
-  query: string;
-}) {
+function saveState(state: { players: Player[]; bracket: Bracket | null; selectedMatchId: number | null; query: string }) {
   const payload = {
     players: state.players,
     bracket: state.bracket,
@@ -264,14 +251,9 @@ function loadState(): {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw);
-    const players = Array.isArray(data.players)
-      ? (data.players as Player[])
-      : [];
+    const players = Array.isArray(data.players) ? (data.players as Player[]) : [];
     const bracket = data.bracket as Bracket | null;
-    const selectedMatchId =
-      typeof data.selectedMatchId === "number" || data.selectedMatchId === null
-        ? data.selectedMatchId
-        : null;
+    const selectedMatchId = typeof data.selectedMatchId === "number" || data.selectedMatchId === null ? data.selectedMatchId : null;
     const query = typeof data.query === "string" ? data.query : "";
     if (bracket) {
       refreshStatuses(bracket);
@@ -299,8 +281,7 @@ export function TournamentsView(root: HTMLElement) {
   /* ---------------- Left Panel: Search + Roster + Cancel ---------------- */
   function LeftPanel() {
     const box = h("aside", {
-      class:
-        "bg-emerald-50 border-r border-emerald-100 p-4 flex flex-col gap-3 h-full overflow-hidden",
+      class: "bg-emerald-50 border-r border-emerald-100 p-4 flex flex-col gap-3 h-full overflow-hidden",
     });
 
     const title = h("div", {
@@ -314,8 +295,7 @@ export function TournamentsView(root: HTMLElement) {
 
     // Search
     const search = h("input", {
-      class:
-        "px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-100/70 placeholder-emerald-900/50 focus:outline-none focus:ring-2 focus:ring-emerald-400",
+      class: "px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-100/70 placeholder-emerald-900/50 focus:outline-none focus:ring-2 focus:ring-emerald-400",
       attributes: {
         placeholder: "Search users…",
         type: "search",
@@ -332,11 +312,7 @@ export function TournamentsView(root: HTMLElement) {
       const already = state.players.some((p) => p.id === u.id);
       const full = state.players.length >= 8;
       const row = h("button", {
-        class:
-          "w-full flex items-center gap-2 px-2 py-1 rounded transition " +
-          (already || full
-            ? "opacity-60 cursor-not-allowed"
-            : "hover:bg-emerald-100/60"),
+        class: "w-full flex items-center gap-2 px-2 py-1 rounded transition " + (already || full ? "opacity-60 cursor-not-allowed" : "hover:bg-emerald-100/60"),
         attributes: { type: "button" },
       });
       row.append(
@@ -371,9 +347,7 @@ export function TournamentsView(root: HTMLElement) {
       results.replaceChildren();
       const q = search.value.trim().toLowerCase();
       if (!q) {
-        results.append(
-          h("div", { class: "text-emerald-900/60 text-sm px-1", text: "" })
-        );
+        results.append(h("div", { class: "text-emerald-900/60 text-sm px-1", text: "" }));
         return;
       }
 
@@ -425,8 +399,7 @@ export function TournamentsView(root: HTMLElement) {
       });
 
       const nick = h("input", {
-        class:
-          "mt-1 w-full px-2 py-1 text-sm rounded-lg border border-emerald-200 bg-white/80 placeholder-emerald-900/40 focus:outline-none focus:ring-2 focus:ring-emerald-300",
+        class: "mt-1 w-full px-2 py-1 text-sm rounded-lg border border-emerald-200 bg-white/80 placeholder-emerald-900/40 focus:outline-none focus:ring-2 focus:ring-emerald-300",
         attributes: {
           type: "text",
           placeholder: "Nickname",
@@ -467,26 +440,22 @@ export function TournamentsView(root: HTMLElement) {
 
     const actions = h("div", { class: "grid grid-cols-3 gap-2" });
     const seedBtn = h("button", {
-      class:
-        "px-3 py-2 rounded-xl bg-emerald-700 text-white hover:bg-emerald-600 disabled:opacity-40",
+      class: "px-3 py-2 rounded-xl bg-emerald-700 text-white hover:bg-emerald-600 disabled:opacity-40",
       attributes: { type: "button" },
       text: "Seed",
     });
     const shuffleBtn = h("button", {
-      class:
-        "px-3 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40",
+      class: "px-3 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40",
       attributes: { type: "button" },
       text: "Shuffle",
     });
     const resetBtn = h("button", {
-      class:
-        "px-3 py-2 rounded-xl bg-emerald-200 text-emerald-900 hover:bg-emerald-100 disabled:opacity-40",
+      class: "px-3 py-2 rounded-xl bg-emerald-200 text-emerald-900 hover:bg-emerald-100 disabled:opacity-40",
       attributes: { type: "button" },
       text: "Clear",
     });
     const cancelBtn = h("button", {
-      class:
-        "mt-2 px-3 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-500 disabled:opacity-40",
+      class: "mt-2 px-3 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-500 disabled:opacity-40",
       attributes: { type: "button" },
       text: "Cancel tournament",
     });
@@ -550,11 +519,7 @@ export function TournamentsView(root: HTMLElement) {
           );
         }
       }
-      const canSeed =
-        (state.players.length === 2 ||
-          state.players.length === 4 ||
-          state.players.length === 8) &&
-        state.bracket == null;
+      const canSeed = (state.players.length === 2 || state.players.length === 4 || state.players.length === 8) && state.bracket == null;
       const canShuffle = state.players.length > 2 && state.bracket == null;
       const canReset = state.players.length !== 0 && state.bracket == null;
       seedBtn.toggleAttribute("disabled", !canSeed);
@@ -564,17 +529,7 @@ export function TournamentsView(root: HTMLElement) {
     }
 
     mount(actions, seedBtn, shuffleBtn, resetBtn);
-    mount(
-      box,
-      title,
-      sub,
-      search,
-      results,
-      rosterHeader,
-      roster,
-      actions,
-      cancelBtn
-    );
+    mount(box, title, sub, search, results, rosterHeader, roster, actions, cancelBtn);
 
     // initial
     renderResults();
@@ -602,19 +557,13 @@ export function TournamentsView(root: HTMLElement) {
   function matchCard(m: Match) {
     const isSelected = state.selectedMatchId === m.id;
 
-    const L = state.bracket
-      ? resolveSource(m.left, state.bracket)
-      : ({ kind: "tbd" } as Source);
-    const R = state.bracket
-      ? resolveSource(m.right, state.bracket)
-      : ({ kind: "tbd" } as Source);
+    const L = state.bracket ? resolveSource(m.left, state.bracket) : ({ kind: "tbd" } as Source);
+    const R = state.bracket ? resolveSource(m.right, state.bracket) : ({ kind: "tbd" } as Source);
 
     const card = h("button", {
       class:
         "w-full text-left px-3 py-2 rounded-xl border transition " +
-        (m.status === "ready"
-          ? "border-indigo-300 ring-2 ring-indigo-100 bg-indigo-50/40"
-          : "border-slate-200 hover:bg-slate-50") +
+        (m.status === "ready" ? "border-indigo-300 ring-2 ring-indigo-100 bg-indigo-50/40" : "border-slate-200 hover:bg-slate-50") +
         (isSelected ? " outline outline-2 outline-indigo-400" : ""),
       attributes: {
         type: "button",
@@ -637,17 +586,11 @@ export function TournamentsView(root: HTMLElement) {
     const leftRow = h("div", { class: "flex items-center gap-2" });
     leftRow.append(
       h("div", {
-        class:
-          "w-2 h-2 rounded-full " +
-          (isPlayer(L) ? "bg-emerald-500" : "bg-slate-300"),
+        class: "w-2 h-2 rounded-full " + (isPlayer(L) ? "bg-emerald-500" : "bg-slate-300"),
       }),
       h("div", {
         class: "truncate break-all",
-        text: isPlayer(L)
-          ? nameOf(state.players, L.playerId)
-          : L.kind === "bye"
-          ? "— BYE —"
-          : "TBD",
+        text: isPlayer(L) ? nameOf(state.players, L.playerId) : L.kind === "bye" ? "— BYE —" : "TBD",
       })
     );
     if (leftWon) leftRow.classList.add("text-emerald-700", "font-semibold");
@@ -655,17 +598,11 @@ export function TournamentsView(root: HTMLElement) {
     const rightRow = h("div", { class: "flex items-center gap-2" });
     rightRow.append(
       h("div", {
-        class:
-          "w-2 h-2 rounded-full " +
-          (isPlayer(R) ? "bg-emerald-500" : "bg-slate-300"),
+        class: "w-2 h-2 rounded-full " + (isPlayer(R) ? "bg-emerald-500" : "bg-slate-300"),
       }),
       h("div", {
         class: "truncate break-all",
-        text: isPlayer(R)
-          ? nameOf(state.players, R.playerId)
-          : R.kind === "bye"
-          ? "— BYE —"
-          : "TBD",
+        text: isPlayer(R) ? nameOf(state.players, R.playerId) : R.kind === "bye" ? "— BYE —" : "TBD",
       })
     );
     if (rightWon) rightRow.classList.add("text-emerald-700", "font-semibold");
@@ -707,8 +644,7 @@ export function TournamentsView(root: HTMLElement) {
       const lastRound = state.bracket.rounds[state.bracket.rounds.length - 1];
       if (!lastRound || lastRound.length === 0) return null;
       const final = lastRound[0];
-      if (!(final && final.status === "completed" && final.winnerId))
-        return null;
+      if (!(final && final.status === "completed" && final.winnerId)) return null;
 
       const winnerAlias = nameOf(state.players, final.winnerId);
       const wrap = h("div", {
@@ -720,8 +656,7 @@ export function TournamentsView(root: HTMLElement) {
 
       const buttons = h("div", { class: "mt-3 flex gap-2" });
       const restart = h("button", {
-        class:
-          "px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-500",
+        class: "px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-500",
         attributes: { type: "button" },
         text: "Restart same tournament",
       });
@@ -796,8 +731,7 @@ export function TournamentsView(root: HTMLElement) {
   /* ---------------- Right Panel: Selected + Queue ---------------- */
   function RightPanel() {
     const box = h("aside", {
-      class:
-        "bg-emerald-50 border-l border-emerald-100 p-4 flex flex-col h-full overflow-hidden min-w-0",
+      class: "bg-emerald-50 border-l border-emerald-100 p-4 flex flex-col h-full overflow-hidden min-w-0",
     });
 
     const selHead = h("div", {
@@ -811,21 +745,15 @@ export function TournamentsView(root: HTMLElement) {
     function selectedUI() {
       selBody.replaceChildren();
       if (!state.bracket || state.selectedMatchId == null) {
-        selBody.append(
-          h("div", { class: "text-emerald-900/60", text: "None selected." })
-        );
+        selBody.append(h("div", { class: "text-emerald-900/60", text: "None selected." }));
         return;
       }
       const m = findMatch(state.bracket, state.selectedMatchId)!;
       const L = resolveSource(m.left, state.bracket);
       const R = resolveSource(m.right, state.bracket);
 
-      const lPlayer: Player = isPlayer(L)
-        ? findPlayer(state.players, L.playerId)
-        : { id: -1, alias: "TBD", avatar: null, nick: "TBD" };
-      const rPlayer: Player = isPlayer(R)
-        ? findPlayer(state.players, R.playerId)
-        : { id: -1, alias: "TBD", avatar: null, nick: "TBD" };
+      const lPlayer: Player = isPlayer(L) ? findPlayer(state.players, L.playerId) : { id: -1, alias: "TBD", avatar: null, nick: "TBD" };
+      const rPlayer: Player = isPlayer(R) ? findPlayer(state.players, R.playerId) : { id: -1, alias: "TBD", avatar: null, nick: "TBD" };
 
       const title = h("div", {
         class: "text-sm text-emerald-900/80 mb-1",
@@ -834,42 +762,25 @@ export function TournamentsView(root: HTMLElement) {
       const rows = h("div", { class: "space-y-2" });
       const row = (label: string) =>
         h("div", {
-          class:
-            "px-3 py-2 rounded-lg bg-white/70 border border-emerald-100 truncate break-all",
+          class: "px-3 py-2 rounded-lg bg-white/70 border border-emerald-100 truncate break-all",
           text: label,
         });
       rows.append(row(lPlayer.nick), row(rPlayer.nick));
 
       // Actions: enable when logical
       const actions = h("div", { class: "mt-3 flex flex-col gap-2" });
-      const make = (
-        label: string,
-        icon: string,
-        tone: "green" | "red" | "indigo"
-      ) => {
-        const toneCls =
-          tone === "green"
-            ? "text-emerald-700 hover:bg-emerald-100/60"
-            : tone === "red"
-            ? "text-rose-700 hover:bg-rose-100/60"
-            : "text-indigo-700 hover:bg-indigo-100/60";
+      const make = (label: string, icon: string, tone: "green" | "red" | "indigo") => {
+        const toneCls = tone === "green" ? "text-emerald-700 hover:bg-emerald-100/60" : tone === "red" ? "text-rose-700 hover:bg-rose-100/60" : "text-indigo-700 hover:bg-indigo-100/60";
         const btn = h("button", {
           class: `w-full flex items-center gap-3 px-3 py-2 rounded-lg transition ${toneCls} disabled:opacity-40`,
           attributes: { type: "button" },
         });
-        btn.append(
-          h("i", { class: `fa-solid ${icon} text-sm` }),
-          h("span", { class: "font-medium", text: label })
-        );
+        btn.append(h("i", { class: `fa-solid ${icon} text-sm` }), h("span", { class: "font-medium", text: label }));
         return btn;
       };
 
       const readyOrInProg = m.status === "ready" || m.status === "in_progress";
-      const start = make(
-        m.status === "in_progress" ? "Resume match" : "Start match",
-        "fa-play",
-        "indigo"
-      );
+      const start = make(m.status === "in_progress" ? "Resume match" : "Start match", "fa-play", "indigo");
       const winL = make(`Set winner: ${lPlayer.nick}`, "fa-trophy", "green");
       const winR = make(`Set winner: ${rPlayer.nick}`, "fa-trophy", "green");
       const clear = make("Clear result", "fa-undo", "red");
@@ -886,16 +797,16 @@ export function TournamentsView(root: HTMLElement) {
           saveState(state);
           right.render();
           center.render();
-          const p1 = {
-            id: lPlayer.id,
-            alias: lPlayer.nick,
-            avatar: lPlayer.avatar,
-          };
-          const p2 = {
-            id: rPlayer.id,
-            alias: rPlayer.nick,
-            avatar: rPlayer.avatar,
-          };
+          //   const p1 = {
+          //     id: lPlayer.id,
+          //     alias: lPlayer.nick,
+          //     avatar: lPlayer.avatar,
+          //   };
+          //   const p2 = {
+          //     id: rPlayer.id,
+          //     alias: rPlayer.nick,
+          //     avatar: rPlayer.avatar,
+          //   };
 
           //   setPlayPreset({ kind: "tournament", p1, p2 });
           window.location.hash = "#/play";
@@ -963,13 +874,10 @@ export function TournamentsView(root: HTMLElement) {
         const L = resolveSource(m.left, state.bracket!);
         const R = resolveSource(m.right, state.bracket!);
         const row = h("button", {
-          class:
-            "w-full text-left px-3 py-2 rounded-lg bg-white/70 border border-emerald-100 text-emerald-900/90 text-sm hover:bg-emerald-100/60",
+          class: "w-full text-left px-3 py-2 rounded-lg bg-white/70 border border-emerald-100 text-emerald-900/90 text-sm hover:bg-emerald-100/60",
           attributes: { type: "button" },
         });
-        row.textContent = `R${m.round + 1} • M${m.order + 1}: ${
-          isPlayer(L) ? nameOf(state.players, L.playerId) : "TBD"
-        } vs ${isPlayer(R) ? nameOf(state.players, R.playerId) : "TBD"}`;
+        row.textContent = `R${m.round + 1} • M${m.order + 1}: ${isPlayer(L) ? nameOf(state.players, L.playerId) : "TBD"} vs ${isPlayer(R) ? nameOf(state.players, R.playerId) : "TBD"}`;
         row.addEventListener("click", () => {
           state.selectedMatchId = m.id;
           saveState(state);

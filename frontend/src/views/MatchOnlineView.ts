@@ -50,7 +50,7 @@ export function MatchOnlineView(root: HTMLElement) {
       return;
     }
     try {
-      await http.putRequest(`/api/matches/${matchId}/cancel/online`);
+      await http.putRequest(`/matches/${matchId}/cancel/online`);
     } catch (e) {
     } finally {
       await quitLocal();
@@ -109,10 +109,9 @@ export function MatchOnlineView(root: HTMLElement) {
   const snaps: TimedSnap[] = []; // tiny buffer; we’ll keep ~2–5 items max
   const drawState: MatchState = JSON.parse(JSON.stringify(state)) as MatchState;
   const INTERP_DELAY_MS = 100; // small playback delay to absorb jitter
-  const MAX_EXTRAP_MS = 100; // clamp extrapolation for safety
 
   /** -- Game driver */
-  const rt = new Realtime("/api/ws");
+  const rt = new Realtime();
   const stop = rt.on((msg: AllWsIncoming) => {
     if (msg.type === "ready") {
       rt.send({ type: "match_subscribe", matchId });

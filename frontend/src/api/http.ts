@@ -14,7 +14,9 @@
  */
 // export const API_BASE = (import.meta as any)?.env?.VITE_API_BASE ?? "";
 // export const API_BASE = import.meta.env.VITE_API_URL;
-export const API_BASE = "http://localhost:5000";
+// export const API_BASE = "http://localhost:5000";
+
+export const API_BASE = "/api";
 
 export class HttpError extends Error {
   constructor(public status: number, message: string, public body?: unknown) {
@@ -35,11 +37,28 @@ export function queryString(params?: Record<string, any>): string {
   return entries.length ? "?" + new URLSearchParams(entries) : "";
 }
 
+// Always returns a valid absolute string URL.
+export function absUrl(pathOrUrl: string, base: string = location.origin): string {
+  if (!pathOrUrl) throw new Error("absUrl: empty path/url");
+  // Already absolute?
+  if (/^(?:https?:|wss?:)/i.test(pathOrUrl)) return pathOrUrl;
+  // Relative → resolve against page origin (works in dev & prod)
+  return new URL(pathOrUrl, base).toString();
+}
+
+export function wsUrl(path = "/ws"): string {
+  const u = new URL(absUrl(path));
+  u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
+  return u.toString();
+}
+
 /**
  * Low-level abstracted function. Called by Http Methods helpers below
  */
 export async function http<T = unknown>(path: string, init: RequestInit = {}): Promise<T> {
-  const url = new URL(path, API_BASE);
+  const safePath = path.startsWith("/") ? path : `/${path}`;
+  const url = absUrl(`${API_BASE}${safePath}`);
+  console.log("URL in http.ts : ", url);
 
   const res = await fetch(url.toString(), {
     // Cookie-based session from backend

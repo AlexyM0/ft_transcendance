@@ -1,5 +1,5 @@
 // frontend/src/helpers/ws_types.ts
-import type { MatchSnapshot, MatchState, Side } from "./GameTypes";
+import type { MatchSnapshot, Side } from "./GameTypes";
 import type { LobbySnapshot, MatchSettingsSnapshot, UserStatus } from "./state_types";
 
 /* ================================================================= */

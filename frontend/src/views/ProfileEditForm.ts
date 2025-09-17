@@ -37,7 +37,7 @@ export function ProfileEditForm(initial: ProfileEditInitial, options: ProfileEdi
   let selectedFile: File | null = null;
   let objectUrl: string | null = null;
   let twofaEnabled = initial.twofaEnabled;
-  let setupQR: { otpauth: string; qrDataUrl: string } | null = null;
+  //   let setupQR: { otpauth: string; qrDataUrl: string } | null = null;
 
   // ----- DOM -----
   const wrap = h("form", { class: "flex flex-col gap-4" });
@@ -162,7 +162,7 @@ export function ProfileEditForm(initial: ProfileEditInitial, options: ProfileEdi
         // Enable flow: ask backend for QR + otpauth
         const setup = await options.on2faToggle("enable");
         if ("qrDataUrl" in setup) {
-          setupQR = setup;
+          //   setupQR = setup;
           qrImg.src = setup.qrDataUrl;
           qrImg.classList.remove("hidden");
           twofaSetupWrap.classList.remove("hidden");

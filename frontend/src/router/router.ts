@@ -1,5 +1,5 @@
 // src/router/router.ts
-import type { View } from "../views/AppShell";
+import type { Unmount } from "../views/AppShell";
 import type { Route } from "./routes";
 
 export type NavigationTarget = {
@@ -18,8 +18,9 @@ export class Router {
   private routes: Route[];
   private options: RouterOptions;
   private outlet: HTMLElement;
-  private currentUnmount: (() => void) | null = null;
+  private currentUnmount: Unmount | null = null;
   private onHashChangeBound: () => void;
+  private navToken = 0;
 
   constructor(routes: Route[], outletSelector = "#app", options: RouterOptions = {}) {
     const outlet = document.querySelector(outletSelector);
@@ -41,6 +42,7 @@ export class Router {
   dispose() {
     window.removeEventListener("hashchange", this.onHashChangeBound);
     this.unmountCurrent();
+    this.navToken++;
   }
 
   navigate(path: string) {
@@ -104,16 +106,43 @@ export class Router {
       return;
     }
 
+    const token = ++this.navToken;
+
     if (this.options.onBeforeEach) {
       await this.options.onBeforeEach(matched);
+      if (token !== this.navToken) return;
     }
 
     this.unmountCurrent();
     this.outlet.replaceChildren();
-    this.currentUnmount = matched.route.view(this.outlet, matched.params);
 
-    if (this.options.onAfterEach) {
-      await this.options.onAfterEach(matched);
+    try {
+      const maybeUnmount = await matched.route.view(this.outlet, matched.params);
+      if (token !== this.navToken) {
+        if (typeof maybeUnmount === "function") {
+          try {
+            maybeUnmount();
+          } catch {}
+          return;
+        }
+      }
+
+      this.currentUnmount = typeof maybeUnmount === "function" ? maybeUnmount : null;
+
+      if (this.options.onAfterEach) {
+        await this.options.onAfterEach(matched);
+        if (token !== this.navToken) return;
+      }
+
+      window.scrollTo(0, 0);
+    } catch (e) {
+      if (token !== this.navToken) return;
+
+      const n = document.createElement("div");
+      n.className = "p-4 text-red-600";
+      n.textContent = `Error: ${e instanceof Error ? e.message : String(e)}`;
+      this.outlet.replaceChildren(n);
+      this.currentUnmount = null;
     }
 
     window.scrollTo(0, 0);

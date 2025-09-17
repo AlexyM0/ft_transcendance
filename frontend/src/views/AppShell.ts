@@ -1,6 +1,6 @@
 // src/views/AppShell.ts
 import { domElem, mount, bind } from "../ui/DomElement";
-import { IconButton, ImageButton } from "../ui/Button";
+import { ImageButton } from "../ui/Button";
 import { Icon } from "../ui/Icons";
 import { auth, logout } from "../store/auth.store";
 import { usersIndex } from "../store/usersIndex.store";
@@ -11,7 +11,10 @@ import { acceptFriendRequest, declineFriendRequest, searchUsers, sendFriendReque
 /**
  * A View mounts into a host and returns an unmount function
  */
-export type View = (host: HTMLElement, params: Record<string, string>) => () => void;
+export type Unmount = () => void;
+export type MaybePromise<T> = T | Promise<T>;
+
+export type View = (root: HTMLElement, params: Record<string, string>) => MaybePromise<void | Unmount>;
 
 /* ------------------ Small UI primitives ------------------ */
 
@@ -157,19 +160,6 @@ const TopBar = (me: PublicUser) => {
   mount(inputPos, input, loupeWrap);
   mount(inputWrap, inputPos);
   mount(searchHost, inputWrap, dropdown);
-
-  // Language toggle (persisted locally)
-  const lang = (localStorage.getItem("lang") || "en").toLowerCase();
-  const langBtn = IconButton(
-    "fa-language",
-    "Toggle language",
-    () => {
-      const next = (localStorage.getItem("lang") || "en").toLowerCase() === "en" ? "fr" : "en";
-      localStorage.setItem("lang", next);
-      document.documentElement.lang = next;
-    },
-    "Toggle language"
-  );
 
   // User avatar (click → profile)
   const avatarBtn = ImageButton(me.avatar_url || "/user.png", me.pseudo, {
@@ -445,7 +435,7 @@ const bindMeAvatar = (avatarImage: HTMLImageElement, me: PublicUser) => {
  * Returns an unmount function that disposes subscriptions and child view.
  */
 export function AppShell(child: View) {
-  return (root: HTMLElement, params: Record<string, string>) => {
+  return async (root: HTMLElement, params: Record<string, string>) => {
     root.className = "min-h-screen bg-emerald-100 text-slate-800";
 
     const meId = auth.get().meId as number;
@@ -465,7 +455,8 @@ export function AppShell(child: View) {
     root.appendChild(layout);
 
     // Mount : set up bindings and child view
-    const unmountChild = child(mainArea.outlet, params);
+    const maybeUnmount = await child(mainArea.outlet, params);
+    const unmountChild: Unmount = typeof maybeUnmount === "function" ? maybeUnmount : () => {};
 
     // Unmount : clean up in reverse order
     return () => {

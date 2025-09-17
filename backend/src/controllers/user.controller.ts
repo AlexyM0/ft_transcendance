@@ -4,6 +4,7 @@ import * as userService from "../services/user.service";
 import { err } from "../utils/errors";
 import { off } from "process";
 import { MultipartFile } from "@fastify/multipart";
+import path from "path";
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 const toInt = (v: any) => (Number.isFinite(Number(v)) ? Number(v) : NaN);
@@ -70,7 +71,7 @@ export async function getUserStats(req: FastifyRequest, rep: FastifyReply) {
   if (!Number.isInteger(offset)) throw err("BAD_OFFSET");
 
   const row = userService.getUserStats(userId);
-  return rep.send({ stats: row });
+  return rep.send(row);
 }
 
 export async function searchForUser(req: FastifyRequest, rep: FastifyReply) {

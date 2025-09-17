@@ -24,7 +24,7 @@ export type Listener = (msg: AllWsIncoming) => void;
  */
 export class Realtime {
   private ws: WebSocket | null = null;
-  private url: string;
+  private url = "/api/ws";
   private listeners = new Set<Listener>();
   private reconnectAttemps = 0;
   private heartbeatTimer: number | null = null;
@@ -35,9 +35,10 @@ export class Realtime {
   /**
    * The constructor defines the url based on the protocol we use (http vs https)
    */
-  constructor(url: "/api/ws") {
+  constructor() {
     const protocol = location.protocol === "https:" ? "wss" : "ws";
-    this.url = url.startsWith("ws") ? url : `${protocol}://${location.host}${url}`;
+    this.url = `${protocol}://${location.host}${this.url}`;
+    console.log(this.url);
   }
 
   /**

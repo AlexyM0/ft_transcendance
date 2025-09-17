@@ -1,7 +1,7 @@
 // frontend/src/helpers/LobbyOnlineState.ts
 import { Realtime } from "./ws";
-import type { AllWsIncoming, LWOInviteAnswer, LWOInviteCancel, LWOInviteSend, LWOLeave, LWOReady, LWOSetSettings, MWICreated } from "./ws_types";
-import type { UserStatus, PublicUser, LobbySnapshot, MatchSettingsSnapshot, LobbyState } from "./state_types";
+import type { AllWsIncoming, LWOInviteAnswer, LWOInviteCancel, LWOInviteSend, LWOLeave, LWOReady, LWOSetSettings } from "./ws_types";
+import type { UserStatus, PublicUser, MatchSettingsSnapshot, LobbyState } from "./state_types";
 
 const defaultSettings: MatchSettingsSnapshot = {
   pointsToWin: 3,
@@ -39,7 +39,7 @@ export function subscribe(fn: Listener) {
 }
 
 /** WS wiring */
-const realtime = new Realtime("/api/ws");
+const realtime = new Realtime();
 
 /**
  * **`onWs`** determines the behaviour of the lobby state when an incoming web socket message is received

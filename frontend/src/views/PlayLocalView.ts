@@ -6,8 +6,6 @@ import { fetchMyProfile } from "./ProfileView";
 
 /** -- Types -- */
 
-const DEFAULT_AVATAR = "/user.png";
-
 export type UserRow = { id: number; pseudo: string; avatar_url: string | null };
 
 export type MatchRow = {
@@ -55,7 +53,7 @@ function createDefaultSettings(me: UserRow, opponent?: UserRow) {
 }
 
 async function leftSettingsPanel(state: Settings, setSideOptionNames: (state: Settings) => void, canStart: () => void) {
-  const users: UserRow[] = (await http.getRequest<UserRow[]>("/api/users/all")).filter((u) => u.id !== state.me.id);
+  const users: UserRow[] = (await http.getRequest<UserRow[]>("/users/all")).filter((u) => u.id !== state.me.id);
 
   const leftWrap = h("div", { class: "flex flex-col gap-3 p-6" });
   const leftHeader = h("div", { class: "text-lg font-semibold text-emerald-900", text: "Choose opponent" });
@@ -234,7 +232,7 @@ async function rightSettingsPanel(state: Settings) {
     }
 
     e.preventDefault();
-    const match = await http.postRequest<MatchRow>("/api/matches", {
+    const match = await http.postRequest<MatchRow>("/matches", {
       meId: state.me.id,
       oppId: state.opponent!.id,
     });

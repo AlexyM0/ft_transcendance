@@ -70,7 +70,7 @@ export function MatchLocalView(root: HTMLElement) {
 
   /** -- DOM Elements - Wire Quit btn to API */
   quitBtn.addEventListener("click", async () => {
-    await http.putRequest(`/api/matches/${state.matchId}/cancel`);
+    await http.putRequest(`/matches/${state.matchId}/cancel`);
     sessionStorage.removeItem("play:local:current");
     location.hash = "/play";
   });
@@ -82,7 +82,7 @@ export function MatchLocalView(root: HTMLElement) {
       rightInfoScore.textContent = String(rightScore);
     },
     onOver: async (leftScore, rightScore) => {
-      await http.putRequest(`/api/matches/${state.matchId}/result`, { scoreP1: leftScore, scoreP2: rightScore });
+      await http.putRequest(`/matches/${state.matchId}/result`, { scoreP1: leftScore, scoreP2: rightScore });
       sessionStorage.removeItem("play:local:current");
     },
   });

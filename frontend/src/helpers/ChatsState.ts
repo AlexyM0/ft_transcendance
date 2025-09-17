@@ -95,7 +95,7 @@ export function onTyping(fn: TypingListener) {
 /**
  * WS wiring
  */
-const realtime = new Realtime("/api/ws");
+const realtime = new Realtime();
 
 /**
  * **`onWs`** determines the behaviour of the chat state when an incoming web socket message is received

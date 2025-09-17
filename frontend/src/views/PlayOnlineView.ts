@@ -3,14 +3,12 @@ import { Lobbies, subscribe as subscribeToLobbies } from "../helpers/LobbyOnline
 import { Avatar } from "../ui/Avatar";
 import { domElem as h } from "../ui/DomElement";
 import { fetchMyProfile } from "./ProfileView";
-import type { UserRow, MatchRow, Points, PaddleSizeKey, Side, Settings, LobbyState } from "../helpers/state_types";
+import type { UserRow, Points, PaddleSizeKey, Side, Settings, LobbyState } from "../helpers/state_types";
 import * as apiFriends from "../api/friends";
 
 /* ======================================================================= */
 /* Utilities                                                               */
 /* ======================================================================= */
-
-const DEFAULT_AVATAR = "/user.png";
 
 function createDefaultSettings(me: UserRow, opponent?: UserRow) {
   return {

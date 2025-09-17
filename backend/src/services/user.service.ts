@@ -75,7 +75,7 @@ export function updateMeAvatar(meId: number, avatarFile: MultipartFile) {
   const diskpath = path.join(AVATAR_DIR, filename);
   pipeline(avatarFile.file, createWriteStream(diskpath));
 
-  const publicUrl = `/uploads/avatars/${filename}`;
+  const publicUrl = `/api/uploads/avatars/${filename}`;
   try {
     const updated = usersModel.updateMeProfile(meId, { avatarUrl: publicUrl });
     return updated;

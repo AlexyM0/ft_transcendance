@@ -12,6 +12,7 @@ import authJwt from "../plugins/auth-jwt";
 import errorHandler from "../plugins/error-handler";
 import oauthProviders from "../plugins/oauth-providers";
 import fileUpload from "../plugins/file-upload";
+
 import tinyLogger from "../plugins/tinyLogger";
 import ws from "../plugins/ws_plugin";
 

@@ -110,7 +110,7 @@ export function toLatestMatch(viewerId: number, rows: MatchRow[]): LatestMatch {
 }
 
 export async function fetchMyProfile() {
-  const resProfile = await http.getRequest<MeUserRow>("/api/users/me");
+  const resProfile = await http.getRequest<MeUserRow>("/users/me");
   const myProfileInfo: MyProfile = {
     id: resProfile.id,
     email: resProfile.email,
@@ -122,7 +122,7 @@ export async function fetchMyProfile() {
 }
 
 async function updateMyProfile(payload: { pseudo?: string; email?: string }) {
-  const resProfile = await http.putRequest<MeUserRow>("/api/users/me", payload);
+  const resProfile = await http.putRequest<MeUserRow>("/users/me", payload);
   const myProfileInfo: MyProfile = {
     id: resProfile.id,
     email: resProfile.email,
@@ -136,7 +136,7 @@ async function updateMyProfile(payload: { pseudo?: string; email?: string }) {
 export async function FetchingData() {
   const myProfileInfo = await fetchMyProfile();
 
-  const resMatches: { userId: number; matches: MatchRow[]; limit: number; offset: number } = await http.getRequest(`/api/users/${myProfileInfo.id}/matches`);
+  const resMatches: { userId: number; matches: MatchRow[]; limit: number; offset: number } = await http.getRequest(`users/${myProfileInfo.id}/matches`);
   const myMatches = resMatches.matches;
   //   console.log(myMatches);
 
@@ -145,26 +145,27 @@ export async function FetchingData() {
 
   const latestMatch = toLatestMatch(myProfileInfo.id, myMatches);
 
-  const stats: UserStats = await http.getRequest<UserStats>(`/api/users/${myProfileInfo.id}/stats`);
+  const stats: UserStats = await http.getRequest<UserStats>(`/users/${myProfileInfo.id}/stats`);
+  console.log("Stats", stats);
   //   console.log(stats);
 
   return { myProfileInfo, myMatches, track, latestMatch, stats };
 }
 
 async function fetchPublicUserByPseudo(pseudo: string): Promise<PublicUserRow | null> {
-  const res = await http.getRequest<{ users: PublicUserRow[]; limit: number; offset: number }>(`/api/users/search?q=${encodeURIComponent(pseudo)}`);
+  const res = await http.getRequest<{ users: PublicUserRow[]; limit: number; offset: number }>(`/users/search?q=${encodeURIComponent(pseudo)}`);
   const users = res.users;
   return users ? users[0] : null;
 }
 
 async function fetchPublicOverview(userId: number) {
-  const user = await http.getRequest<PublicUserRow>(`/api/users/${userId}`);
-  const resMatches: { userId: number; matches: MatchRow[]; limit: number; offset: number } = await http.getRequest(`/api/users/${userId}/matches`);
+  const user = await http.getRequest<PublicUserRow>(`/users/${userId}`);
+  const resMatches: { userId: number; matches: MatchRow[]; limit: number; offset: number } = await http.getRequest(`/users/${userId}/matches`);
   const matches = resMatches.matches;
 
   const track: MatchResult[] = toMatchResults(userId, matches);
   const latestMatch = toLatestMatch(userId, matches);
-  const stats = await http.getRequest<UserStats>(`/api/users/${userId}/stats`);
+  const stats = await http.getRequest<UserStats>(`/users/${userId}/stats`);
 
   const publicProfile: MyProfile = {
     id: userId,
@@ -223,11 +224,7 @@ function WinrateCard() {
       return;
     }
     const wrap = h("div", { class: "flex flex-col text-center" });
-    mount(
-      wrap,
-      h("div", { class: "font-extrabold text-2xl text-teal-600", text: `${s.stats.wins} games won` }),
-      h("div", { class: "text-xl text-slate-400", text: `(${Math.round(s.stats.win_ratio * 100)}%)` })
-    );
+    mount(wrap, h("div", { class: "font-extrabold text-2xl text-teal-600", text: `${s.wins} games won` }), h("div", { class: "text-xl text-slate-400", text: `(${Math.round(s.win_ratio * 100)}%)` }));
     slot.append(wrap);
   }
   return { el: box, update: render };
@@ -343,11 +340,11 @@ function ProfileCard() {
     const form = ProfileEditForm(init, {
       async onSubmit(payload) {
         // Avatar
-        if (payload.deleteAvatar) await http.deleteRequest("/api/users/me/avatar");
+        if (payload.deleteAvatar) await http.deleteRequest("/users/me/avatar");
         if (payload.avatarFile) {
           const fd = new FormData();
           fd.append("avatar", payload.avatarFile, payload.avatarFile.name);
-          await http.putForm("/api/users/me/avatar", fd);
+          await http.putForm("/users/me/avatar", fd);
         }
 
         // Profile fields
@@ -372,16 +369,16 @@ function ProfileCard() {
       },
       async on2faToggle(next) {
         if (next === "enable") {
-          const setup = await http.postRequest<{ otpauth: string; qrDataUrl: string }>("/api/auth/2fa/setup");
+          const setup = await http.postRequest<{ otpauth: string; qrDataUrl: string }>("/auth/2fa/setup");
           return setup; // form will render QR + code box
         } else {
-          await await http.deleteRequest("/api/auth/2fa");
+          await await http.deleteRequest("/auth/2fa");
           set2fa(false);
           return { disabled: true as const };
         }
       },
       async on2faVerify(code) {
-        await http.postRequest<{ success: boolean }>("/api/auth/2fa/verify", { code });
+        await http.postRequest<{ success: boolean }>("/auth/2fa/verify", { code });
         set2fa(true);
         return { success: true as const };
       },

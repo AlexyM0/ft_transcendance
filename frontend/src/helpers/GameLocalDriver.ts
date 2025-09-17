@@ -28,16 +28,19 @@ export function GameLocalDriver(
         renderer.setPaused(true);
         renderer.setCountdown(secs);
         renderer.setOver(null);
+        break;
       }
       case "paused": {
         renderer.setPaused(true);
         renderer.setCountdown(null);
         renderer.setOver(null);
+        break;
       }
       case "over": {
         renderer.setPaused(true);
         renderer.setCountdown(null);
         renderer.setOver(state.winner?.name ? `Winner ${state.winner?.name ?? ""}` : null);
+        break;
       }
     }
   }

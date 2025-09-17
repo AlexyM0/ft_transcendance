@@ -10,8 +10,6 @@ import * as apiFriends from "../api/friends";
 /* ===================== HELPERS  ========================== */
 /* ========================================================= */
 
-const me = { id: auth.get().meId, name: "You", avatar: "/user.png" };
-
 function statusDot(online: boolean) {
   const c = online ? "bg-emerald-500" : "bg-slate-400";
   return h("span", { class: `inline-block w-2.5 h-2.5 rounded-full ${c}` });
@@ -359,7 +357,7 @@ function TopBarCenter(friend: Friend | null, getActiveChatId: () => number | nul
     attributes: { placeholder: "Search…", type: "search" },
   });
   bar.append(left, search);
-  const unsubscribeTyping = onTyping((chatId, userId, isTyping) => {
+  const unsubscribeTyping = onTyping((chatId) => {
     const active = getActiveChatId();
     if (!active || chatId !== active) return;
     const othersTyping = Chats.getTypingUsers(chatId).filter((u) => u !== Chats.getState().meId);
@@ -552,8 +550,6 @@ function RightPanel(state: { activeId: number | null; forceRenderAll: () => void
       if (!f) return;
 
       // Map Chat friend -> Play User
-      const opp = { id: f.id, alias: f.name, avatar: f.avatar };
-      const meUser = { id: 1, alias: me.name, avatar: me.avatar }; // reuse your chat `me`
       window.location.hash = "#/play"; // simplest default if you use hash routing
     }),
 
