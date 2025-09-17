@@ -14,7 +14,7 @@
  */
 // export const API_BASE = (import.meta as any)?.env?.VITE_API_BASE ?? "";
 // export const API_BASE = import.meta.env.VITE_API_URL;
-export const API_BASE = "http://10.12.4.10:5000";
+export const API_BASE = "http://localhost:5000";
 
 export class HttpError extends Error {
   constructor(public status: number, message: string, public body?: unknown) {

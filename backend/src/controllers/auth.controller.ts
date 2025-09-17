@@ -1,7 +1,7 @@
 // auth.controller.ts
 import type { FastifyRequest, FastifyReply } from "fastify";
 import * as authService from "../services/auth.service";
-import * as dto from "../../../shared/dto";
+import * as dto from "../types/dto";
 import { err } from "../utils/errors";
 
 export async function register(req: FastifyRequest, rep: FastifyReply) {
@@ -50,7 +50,7 @@ export async function githubOAuthCallback(req: FastifyRequest, rep: FastifyReply
   const user = await authService.finishLoginFromGithub(accessToken.token.access_token);
 
   await req.server.issueSessionCookie(rep, { sub: user.id, pseudo: user.pseudoSuffix, email: user.email });
-  return rep.code(302).redirect("http://10.12.4.10:5173");
+  return rep.code(302).redirect("http://localhost:5173");
 }
 
 export async function googleOAuthStart(req: FastifyRequest, rep: FastifyReply) {
@@ -63,7 +63,7 @@ export async function googleOAuthCallback(req: FastifyRequest, rep: FastifyReply
   const user = await authService.finishLoginFromGoogle(accessToken.token.access_token);
 
   await req.server.issueSessionCookie(rep, { sub: user.id, pseudo: user.pseudoSuffix, email: user.email });
-  return rep.code(302).redirect("http://10.12.4.10:5173");
+  return rep.code(302).redirect("http://localhost:5173");
 }
 
 export async function fortyTwoOAuthStart(req: FastifyRequest, rep: FastifyReply) {
@@ -76,7 +76,7 @@ export async function fortyTwoOAuthCallback(req: FastifyRequest, rep: FastifyRep
   const user = await authService.finishLoginFromFortyTwo(accessToken.token.access_token);
 
   await req.server.issueSessionCookie(rep, { sub: user.id, pseudo: user.pseudoSuffix, email: user.email });
-  return rep.code(302).redirect("http://10.12.4.10:5173");
+  return rep.code(302).redirect("http://localhost:5173");
 }
 
 // 2FA code at setup (user already logged in, current token is session cookie)

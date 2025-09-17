@@ -20,7 +20,6 @@ export type Route = {
 
 export const Routes: Route[] = [
   { path: "/login", view: LoginView, auth: false },
-  //   { path: "/play", view: AppShell(PlayView), auth: true },
 
   { path: "/play", view: AppShell(PlayChooserView), auth: true },
   { path: "/play/local", view: AppShell(PlayLocalView), auth: true },
