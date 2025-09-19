@@ -1,7 +1,7 @@
 // frontend/src/helpers/LobbyOnlineState.ts
-import { Realtime } from "./ws";
-import type { AllWsIncoming, LWOInviteAnswer, LWOInviteCancel, LWOInviteSend, LWOLeave, LWOReady, LWOSetSettings } from "./ws_types";
-import type { UserStatus, PublicUser, MatchSettingsSnapshot, LobbyState } from "./state_types";
+import { Realtime } from "../helpers/ws";
+import type { AllWsIncoming, LWOInviteAnswer, LWOInviteCancel, LWOInviteSend, LWOLeave, LWOReady, LWOSetSettings } from "../helpers/ws_types";
+import type { UserStatus, PublicUser, MatchSettingsSnapshot, LobbyState } from "../helpers/state_types";
 
 const defaultSettings: MatchSettingsSnapshot = {
   pointsToWin: 3,

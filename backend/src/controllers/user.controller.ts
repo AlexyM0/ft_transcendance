@@ -83,7 +83,7 @@ export async function searchForUser(req: FastifyRequest, rep: FastifyReply) {
   const offset = Math.max(0, Number(q.offset ?? 0));
   if (!Number.isInteger(limit)) throw err("BAD_LIMIT");
   if (!Number.isInteger(offset)) throw err("BAD_OFFSET");
-  if (query.length < 2) throw err("BAD_USER_QUERY");
+  if (query.length < 1) throw err("BAD_USER_QUERY");
 
   const users = userService.searchUserWithRelation(meId, query, limit, offset);
 

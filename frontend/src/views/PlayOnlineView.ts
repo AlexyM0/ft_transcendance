@@ -1,5 +1,5 @@
 // frontend/src/views/PlayOnlineView.ts
-import { Lobbies, subscribe as subscribeToLobbies } from "../helpers/LobbyOnlineState";
+import { Lobbies, subscribe as subscribeToLobbies } from "../store/LobbyOnlineState";
 import { Avatar } from "../ui/Avatar";
 import { domElem as h } from "../ui/DomElement";
 import { fetchMyProfile } from "./ProfileView";
@@ -414,7 +414,7 @@ function buildRightSettingsPanel(state: Settings) {
 export async function PlayOnlineView(root: HTMLElement) {
   /** -- Initial setup */
   root.replaceChildren();
-  Lobbies.init();
+  //   Lobbies.init();
 
   const myProfile = await fetchMyProfile();
   const me: UserRow = {

@@ -3,6 +3,9 @@
  * Lightweight shapes matching the backend controllers' responses
  */
 
+import type { MatchSettings } from "../helpers/GameTypes";
+import type { Settings } from "../helpers/state_types";
+
 export type Me = {
   id: number;
   email: string;
@@ -74,17 +77,52 @@ export type UserMatches = {
   offset: number;
 };
 
-export type Tournament = {
-  id: number;
-  owner_id: number;
+export type TournamentStatus = "registration" | "ongoing" | "finished" | "canceled";
+
+export type TournamentLite = {
+  tournament_id: number;
   title: string;
-  description: string | null;
+  created_by: PublicUser;
   max_players: number;
-  status: "registration" | "running" | "completed";
+  player_count: number;
+  status: TournamentStatus;
   created_at: string;
 };
 
-export type TournamentDetails = {
-  tournament: Tournament;
-  participants: { user_Id: number }[];
+export type TournamentPlayerSlot = {
+  user_id: number;
+  name: string;
+  alias: string | null;
+};
+
+export type TournamentMatch = {
+  tournament_id: number;
+  match_id: number;
+  player1_idx: number;
+  player2_idx: number;
+  played: boolean;
+  score_p1: number | null;
+  score_p2: number | null;
+};
+
+export type TournamentFull = {
+  tournament_id: number;
+  title: string;
+  owner: PublicUser;
+  max_players: number;
+  status: TournamentStatus;
+  settings: MatchSettings;
+  players: TournamentPlayerSlot[];
+  matches: TournamentMatch[];
+};
+
+export type CreateTournamentPayload = {
+  name: string;
+  maxPlayers: number;
+  settings: MatchSettings;
+};
+
+export type UpdateAliasPayload = {
+  index: number;
+  alias: string;
 };

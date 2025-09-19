@@ -41,6 +41,8 @@ export type MatchSettingsSnapshot = {
   hostSide: "left" | "right";
 };
 
+export type MatchSettings = MatchSettingsSnapshot;
+
 export function createDefaultMatchSettings(): MatchSettingsSnapshot {
   return {
     pointsToWin: 3,
@@ -91,4 +93,54 @@ export type LobbyState = {
   lobbySnapshot: LobbySnapshot | null; // Lobby snapshot from server when formed
   loading: boolean;
   error: string | null;
+};
+
+export type TournamentStatus = "registration" | "ongoing" | "finished" | "canceled";
+
+export type TournamentLite = {
+  tournament_id: number;
+  title: string;
+  created_by: PublicUser;
+  max_players: number;
+  player_count: number;
+  status: TournamentStatus;
+  created_at: string;
+};
+
+export type TournamentPlayerSlot = {
+  user_id: number;
+  name: string;
+  alias: string | null;
+};
+
+export type TournamentMatch = {
+  tournament_id: number;
+  match_id: number;
+  player1_idx: number;
+  player2_idx: number;
+  played: boolean;
+  score_p1: number | null;
+  score_p2: number | null;
+};
+
+export type TournamentFull = {
+  tournament_id: number;
+  title: string;
+  owner: PublicUser;
+  max_players: number;
+  status: TournamentStatus;
+  settings: MatchSettingsSnapshot;
+  players: TournamentPlayerSlot[];
+  matches: TournamentMatch[];
+};
+
+export type CreateTournamentPayload = {
+  name: string;
+  maxPlayers: number;
+  settings: MatchSettingsSnapshot;
+};
+
+export type UpdateAliasPayload = {
+  index: number;
+  alias: string;
 };

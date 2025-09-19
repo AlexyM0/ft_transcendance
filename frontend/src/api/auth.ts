@@ -33,15 +33,15 @@ export const AuthAPI = {
    * because backend issues a 302 redirection
    */
   startGithubOAuth: () => {
-    window.location.assign("/auth/oauth/github/start");
+    window.location.assign("/api/auth/oauth/github/start");
   },
 
   startGoogleOAuth: () => {
-    window.location.assign("/auth/oauth/google/start");
+    window.location.assign("/api/auth/oauth/google/start");
   },
 
   start42OAuth: () => {
-    window.location.assign("/auth/oauth/42/start");
+    window.location.assign("/api/auth/oauth/42/start");
   },
 
   /**

@@ -3,8 +3,22 @@ import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
 
-const MIGRATIONS_DIR = path.join(__dirname, "migrations");
-const DB_PATH = path.join(__dirname, "transcendance.db");
+// In Docker and prod, process.cwd() === "/app"
+const ROOT = process.cwd();
+
+// Where the SQL files live at runtime:
+const MIGRATIONS_DIR = path.resolve(ROOT, "db", "migrations");
+
+// Where the SQLite file lives (same path your app uses):
+const DB_PATH = process.env.DB_FILE || path.resolve(ROOT, "db", "transcendance.db");
+
+// Safety checks (useful logs)
+if (!fs.existsSync(MIGRATIONS_DIR)) {
+  throw new Error(`[migrate] Migrations directory not found: ${MIGRATIONS_DIR}`);
+}
+
+// Ensure parent dir for DB exists (in case it’s not created yet)
+fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 const db = new Database(DB_PATH);
 db.pragma("foreign_keys = ON");

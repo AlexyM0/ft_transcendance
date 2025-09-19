@@ -3,11 +3,11 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon --watch 'src/**/*.ts' --exec 'ts-node' src/index.ts",
     "dbmigrate": "ts-node db/migrate.ts",
+    "dev": "nodemon --watch 'src/**/*.ts' --exec 'ts-node' src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
-    "test": "node --exec 'ts-node' src/utils/crypto.ts"
+    "migrate": "node dist/db/migrate.js",
+    "start": "node dist/db/migrate.js && node dist/src/index.js"
   },
   "keywords": [],
   "author": "",

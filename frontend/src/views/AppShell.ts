@@ -5,8 +5,9 @@ import { Icon } from "../ui/Icons";
 import { auth, logout } from "../store/auth.store";
 import { usersIndex } from "../store/usersIndex.store";
 import type { PublicUser } from "../api/types";
-import { Chats } from "../helpers/ChatsState";
+import { Chats } from "../store/ChatsState";
 import { acceptFriendRequest, declineFriendRequest, searchUsers, sendFriendRequest, unfriend, type SearchHit } from "../api/friends";
+import { Lobbies } from "../store/LobbyOnlineState";
 
 /**
  * A View mounts into a host and returns an unmount function
@@ -355,7 +356,7 @@ const TopBar = (me: PublicUser) => {
 
   const runSearch = debounce(async () => {
     const q = input.value.trim();
-    if (q.length < 2) {
+    if (q.length < 1) {
       setDropdownVisible(false);
       return;
     }
@@ -447,9 +448,11 @@ export function AppShell(child: View) {
 
     const beforeUnload = () => {
       Chats.shutdown();
+      Lobbies.shutdown();
     };
     window.addEventListener("beforeunload", beforeUnload);
     Chats.init();
+    Lobbies.init();
 
     mount(layout, sideBar.wrap, mainArea.box);
     root.appendChild(layout);

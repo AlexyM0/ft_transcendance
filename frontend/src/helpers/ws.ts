@@ -81,42 +81,6 @@ export class Realtime {
     this.send({ type: "ping" } as SWOPing);
   }
 
-  //   subscribeMatch(matchId: number) {
-  //     this.send({ type: "subscribe_match", matchId });
-  //   }
-
-  //   unsubscribeMatch(matchId: number) {
-  //     this.send({ type: "unsubscribe_match", matchId });
-  //   }
-
-  //   inviteSend(to: number) {
-  //     this.send({ type: "invite_send", to });
-  //   }
-
-  //   inviteCancel(inviteId: number) {
-  //     this.send({ type: "invite_cancel", inviteId });
-  //   }
-
-  //   inviteAnswer(inviteId: number, accept: boolean) {
-  //     this.send({ type: "invite_answer", inviteId, accept });
-  //   }
-
-  //   matchSetSettings(matchId: number, settings: MatchSettingsWire) {
-  //     this.send({ type: "match_settings", matchId, settings });
-  //   }
-
-  //   matchReady(matchId: number, ready: boolean) {
-  //     this.send({ type: "match_ready", matchId, ready });
-  //   }
-
-  //   matchInput(matchId: number, key: "up" | "down" | "left" | "right", pressed: boolean) {
-  //     this.send({ type: "match_input", matchId, key, pressed, at: performance.now() });
-  //   }
-
-  //   matchTogglePause(matchId: number) {
-  //     this.send({ type: "match_toggle_pause", matchId });
-  //   }
-
   /**
    * Private functions :
    * Creates a web socket based on this class url and defines the callbacks

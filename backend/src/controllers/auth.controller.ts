@@ -50,7 +50,12 @@ export async function githubOAuthCallback(req: FastifyRequest, rep: FastifyReply
   const user = await authService.finishLoginFromGithub(accessToken.token.access_token);
 
   await req.server.issueSessionCookie(rep, { sub: user.id, pseudo: user.pseudoSuffix, email: user.email });
-  return rep.code(302).redirect("http://localhost:5173");
+
+  const proto = String(req.headers["x-forwarded-proto"] ?? req.protocol);
+  const host = String(req.headers["x-forwarded-host"] ?? req.headers["host"]);
+  const origin = `${proto}://${host}`;
+
+  return rep.code(302).redirect(`${origin}`);
 }
 
 export async function googleOAuthStart(req: FastifyRequest, rep: FastifyReply) {
@@ -63,7 +68,11 @@ export async function googleOAuthCallback(req: FastifyRequest, rep: FastifyReply
   const user = await authService.finishLoginFromGoogle(accessToken.token.access_token);
 
   await req.server.issueSessionCookie(rep, { sub: user.id, pseudo: user.pseudoSuffix, email: user.email });
-  return rep.code(302).redirect("http://localhost:5173");
+  const proto = String(req.headers["x-forwarded-proto"] ?? req.protocol);
+  const host = String(req.headers["x-forwarded-host"] ?? req.headers["host"]);
+  const origin = `${proto}://${host}`;
+
+  return rep.code(302).redirect(`${origin}`);
 }
 
 export async function fortyTwoOAuthStart(req: FastifyRequest, rep: FastifyReply) {
@@ -76,7 +85,11 @@ export async function fortyTwoOAuthCallback(req: FastifyRequest, rep: FastifyRep
   const user = await authService.finishLoginFromFortyTwo(accessToken.token.access_token);
 
   await req.server.issueSessionCookie(rep, { sub: user.id, pseudo: user.pseudoSuffix, email: user.email });
-  return rep.code(302).redirect("http://localhost:5173");
+  const proto = String(req.headers["x-forwarded-proto"] ?? req.protocol);
+  const host = String(req.headers["x-forwarded-host"] ?? req.headers["host"]);
+  const origin = `${proto}://${host}`;
+
+  return rep.code(302).redirect(`${origin}`);
 }
 
 // 2FA code at setup (user already logged in, current token is session cookie)

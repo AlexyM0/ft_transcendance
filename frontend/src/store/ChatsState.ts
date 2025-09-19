@@ -4,8 +4,8 @@
  * Store that hides http + ws. UI subscribes to state changes
  */
 
-import { Realtime } from "./ws";
-import type { AllWsIncoming, CWOSend, CWOSubscribe, CWOTyping, CWOUnsubscribe } from "./ws_types";
+import { Realtime } from "../helpers/ws";
+import type { AllWsIncoming, CWOSend, CWOSubscribe, CWOTyping, CWOUnsubscribe } from "../helpers/ws_types";
 import * as apiFriends from "../api/friends";
 
 /**

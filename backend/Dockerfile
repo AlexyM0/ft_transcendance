@@ -1,11 +1,19 @@
 # ---- build stage ----
 FROM node:20-alpine AS build
 WORKDIR /app
+
 COPY package*.json ./
 RUN npm ci
-COPY . .
+
+# Copy source (TS + SQL migrations + uploads assets)
+COPY tsconfig.json ./
+COPY src ./src
+COPY db ./db
+COPY uploads ./uploads
+
 # Compile TypeScript to /app/dist
 RUN npm run build
+
 
 # ---- runtime stage ----
 FROM node:20-alpine
@@ -22,9 +30,12 @@ COPY --from=build /app/db ./db
 # Static/uploads folders if your API serves them
 COPY --from=build /app/uploads ./uploads
 
-# Ensure writable locations for SQLite db and uploads
-# If you keep DB inside /app/db/transcendance.db, mount a volume (see compose)
+# Entrypoint runs migrate then server
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+# Persist DB & uploads between container restarts
 VOLUME ["/app/db", "/app/uploads"]
 
 EXPOSE 5000
-CMD ["node", "dist/index.js"]
+ENTRYPOINT ["/docker-entrypoint.sh"]

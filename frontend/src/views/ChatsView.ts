@@ -2,7 +2,7 @@
 
 import { domElem as h, mount } from "../ui/DomElement";
 import { Avatar } from "../ui/Avatar";
-import { Chats, subscribe, onTyping, type Friend, type Msg, type ReqUser } from "../helpers/ChatsState";
+import { Chats, subscribe, onTyping, type Friend, type Msg, type ReqUser } from "../store/ChatsState";
 import { auth } from "./../store/auth.store";
 import * as apiFriends from "../api/friends";
 
@@ -592,7 +592,7 @@ export function ChatsView(root: HTMLElement) {
   });
 
   // Init the chat state on loading the view
-  Chats.init();
+  //   Chats.init();
 
   // Local UI state : monitors which panel is open
   const state = {
