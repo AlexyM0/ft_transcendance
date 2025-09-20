@@ -25,7 +25,11 @@ const CROSS_SITE_COOKIES = (process.env.CROSS_SITE_COOKIES || "1") === "1";
  * - value is the token (a string generated from payload)
  * - options are added to the token (http, duration, ...)
  */
-const issueSessionCookie = async function (rep: FastifyReply, payload: Record<string, any>, options?: { expiresIn?: string | number }) {
+const issueSessionCookie = async function (
+  rep: FastifyReply,
+  payload: Record<string, any>,
+  options?: { expiresIn?: string | number }
+) {
   const token = await rep.jwtSign(payload, {
     expiresIn: options?.expiresIn ?? "1h",
   });
@@ -35,13 +39,17 @@ const issueSessionCookie = async function (rep: FastifyReply, payload: Record<st
     // secure: isProd || CROSS_SITE_COOKIES,
     // sameSite: CROSS_SITE_COOKIES ? ("none" as const) : ("strict" as const),
     sameSite: "lax",
-    secure: false,
+    secure: true,
     path: "/",
     maxAge: 4 * 60 * 60,
   });
 };
 
-const issuePendingCookie = async function (rep: FastifyReply, payload: Record<string, any>, options?: { expiresIn?: string | number }) {
+const issuePendingCookie = async function (
+  rep: FastifyReply,
+  payload: Record<string, any>,
+  options?: { expiresIn?: string | number }
+) {
   const token = await rep.jwtSign(payload, {
     expiresIn: options?.expiresIn ?? "5m",
   });
@@ -51,7 +59,7 @@ const issuePendingCookie = async function (rep: FastifyReply, payload: Record<st
     // secure: isProd || CROSS_SITE_COOKIES,
     // sameSite: CROSS_SITE_COOKIES ? ("none" as const) : ("strict" as const),
     sameSite: "lax",
-    secure: false,
+    secure: true,
     path: "/",
     maxAge: 5 * 60,
   });
@@ -86,7 +94,10 @@ const authenticate = async function (req: FastifyRequest, rep: FastifyReply) {
   }
 };
 
-const authenticatePending = async function (req: FastifyRequest, rep: FastifyReply) {
+const authenticatePending = async function (
+  req: FastifyRequest,
+  rep: FastifyReply
+) {
   try {
     const token = req.cookies?.[PENDING_COOKIE];
     if (!token) throw new Error("missing pending cookie");

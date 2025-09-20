@@ -12,14 +12,24 @@ import { withTx } from "../utils/db";
 const PSEUDO_MIN = 1;
 const PSEUDO_MAX = 32;
 const BCRYPT_HASH_ROUNDS = 12;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)\S{7,}$/;
 
-export async function register(input: { email: string; pseudo: string; password: string }): Promise<{ id: number }> {
+export async function register(input: {
+  email: string;
+  pseudo: string;
+  password: string;
+}): Promise<{ id: number }> {
   // Normalize
   const email = input.email.trim();
   const pseudo = input.pseudo.trim();
+  const password = input.password.trim();
 
-  if (pseudo.length < PSEUDO_MIN || pseudo.length > PSEUDO_MAX) throw err("BAD_PSEUDO");
+  if (pseudo.length < PSEUDO_MIN || pseudo.length > PSEUDO_MAX)
+    throw err("BAD_PSEUDO");
 
+  if (!EMAIL_REGEX.test(String(email).trim())) throw err("BAD_EMAIL");
+  if (!PASSWORD_REGEX.test(String(password))) throw err("BAD_PASSWORD");
   const hash = await bcrypt.hash(input.password, BCRYPT_HASH_ROUNDS);
   try {
     const { id } = authModel.createUser(email, pseudo, hash);
@@ -31,7 +41,10 @@ export async function register(input: { email: string; pseudo: string; password:
   }
 }
 
-export async function verifyCredentials(pseudoOrEmail: string, password: string) {
+export async function verifyCredentials(
+  pseudoOrEmail: string,
+  password: string
+) {
   const user = authModel.getByLogin(pseudoOrEmail);
   if (!user) return null;
   const password_ok = await bcrypt.compare(password, user.pwd_hash);
@@ -50,7 +63,9 @@ async function findOrCreateOAuthUser(email: string, preferredPseudo: string) {
 
   const randomPassword = crypto.randomBytes(24).toString("hex");
   const pwdHash = await bcrypt.hash(randomPassword, BCRYPT_HASH_ROUNDS);
-  const pseudo = (preferredPseudo ?? email.split("@")[0]).replace(/[^a-z0-9_]/gi, "").slice(0, 24);
+  const pseudo = (preferredPseudo ?? email.split("@")[0])
+    .replace(/[^a-z0-9_]/gi, "")
+    .slice(0, 24);
   const pseudoSuffix = `${pseudo}_${crypto.randomBytes(4).toString("hex")}`;
   const { id } = authModel.createUser(email, pseudoSuffix, pwdHash);
   createNewUserStats(id);
@@ -77,26 +92,38 @@ async function loadGithubIdentity(accessToken: string) {
     }).then((r) => r.json());
     // if (!emails.ok) throw err("INVALID_CREDENTIALS", `Github /user failed: ${emails.status}`);
 
-    const primaryEmail = Array.isArray(emails) ? emails.find((e: any) => e.primary && e.verified) : null;
-    email = primaryEmail?.email || (Array.isArray(emails) ? emails.find((e: any) => e.verified)?.email : null);
+    const primaryEmail = Array.isArray(emails)
+      ? emails.find((e: any) => e.primary && e.verified)
+      : null;
+    email =
+      primaryEmail?.email ||
+      (Array.isArray(emails)
+        ? emails.find((e: any) => e.verified)?.email
+        : null);
   }
   if (!email) throw err("OAUTH_EMAIL_REQUIRED");
   return { email, preferredPseudo: identity.login || email.split("@")[0] };
 }
 
 async function loadGoogleIdentity(accessToken: string) {
-  const identity = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      // signal: AbortSignal.timeout(8000),
-    },
-  }).then((r) => r.json());
+  const identity = await fetch(
+    "https://openidconnect.googleapis.com/v1/userinfo",
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        // signal: AbortSignal.timeout(8000),
+      },
+    }
+  ).then((r) => r.json());
   //   if (!identity.ok) throw err("INVALID_CREDENTIALS", `Google userinfo ${identity.status}`);
 
-  if (!identity.email || !identity.email_verified) throw err("OAUTH_EMAIL_REQUIRED");
+  if (!identity.email || !identity.email_verified)
+    throw err("OAUTH_EMAIL_REQUIRED");
   return {
     email: String(identity.email),
-    preferredPseudo: String(identity.given_name || identity.name || identity.email.split("@")[0]),
+    preferredPseudo: String(
+      identity.given_name || identity.name || identity.email.split("@")[0]
+    ),
   };
 }
 
@@ -131,7 +158,10 @@ export async function finishLoginFromFortyTwo(accessToken: string) {
   return findOrCreateOAuthUser(identity.email, identity.preferredPseudo);
 }
 
-export async function beginTwofaEnrollment(meId: number, issuer = process.env.TWOFA_ISSUER || "Transcendance") {
+export async function beginTwofaEnrollment(
+  meId: number,
+  issuer = process.env.TWOFA_ISSUER || "Transcendance"
+) {
   const me = authModel.getById(meId);
   if (!me) throw err("USER_NOT_FOUND");
   if (me.is_2fa_enabled) throw err("TWOFA_ALREADY_ENABLED");
@@ -155,13 +185,17 @@ export async function beginTwofaEnrollment(meId: number, issuer = process.env.TW
 }
 
 export async function completeTwofaEnrollment(userId: number, code: string) {
-  if (typeof code !== "string" || !/^\d{6}$/.test(code)) throw err("USER_MISSING_FIELDS", "A 6-digit code is required");
+  if (typeof code !== "string" || !/^\d{6}$/.test(code))
+    throw err("USER_MISSING_FIELDS", "A 6-digit code is required");
 
   const pendingSecretEnc = authModel.loadPendingSecret(userId);
   if (!pendingSecretEnc) throw err("TWOFA_SETUP_REQUIRED");
 
   // TTL (Time To Live) 10min
-  if (Date.now() - Date.parse(pendingSecretEnc.created_at + "Z") > 10 * 60 * 1000) {
+  if (
+    Date.now() - Date.parse(pendingSecretEnc.created_at + "Z") >
+    10 * 60 * 1000
+  ) {
     authModel.clearPendingSecret(userId);
     throw err("TWOFA_SETUP_REQUIRED");
   }
@@ -188,11 +222,13 @@ export function disableTwofa(userId: number) {
 }
 
 export async function verifyTwofaLoginCode(userId: number, code: string) {
-  if (typeof code !== "string" || !/^\d{6}$/.test(code)) throw err("USER_MISSING_FIELDS", "A 6-digit code is required");
+  if (typeof code !== "string" || !/^\d{6}$/.test(code))
+    throw err("USER_MISSING_FIELDS", "A 6-digit code is required");
 
   const user = authModel.getById(userId);
   if (!user) throw err("USER_NOT_FOUND");
-  if (!user.is_2fa_enabled || !user.twofa_secret_enc) throw err("TWOFA_SETUP_REQUIRED");
+  if (!user.is_2fa_enabled || !user.twofa_secret_enc)
+    throw err("TWOFA_SETUP_REQUIRED");
 
   const secretDec = decryptGCM(user.twofa_secret_enc);
   const verified = authenticator.verify({ token: code, secret: secretDec });

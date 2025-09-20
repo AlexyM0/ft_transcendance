@@ -101,7 +101,6 @@ export function joinTournament(
       userId,
       null
     );
-    console.log(inserted);
 
     return tournamentsModel.getTournamentFullModel(tournamentId)!;
   });

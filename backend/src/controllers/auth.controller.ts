@@ -26,7 +26,11 @@ export async function login(req: FastifyRequest, rep: FastifyReply) {
     return rep.send(responseBody);
   }
 
-  await req.server.issueSessionCookie(rep, { sub: user.id, pseudo: user.pseudo, email: user.email });
+  await req.server.issueSessionCookie(rep, {
+    sub: user.id,
+    pseudo: user.pseudo,
+    email: user.email,
+  });
   responseBody = { success: true };
   rep.send(responseBody);
 }
@@ -45,17 +49,30 @@ export async function githubOAuthStart(req: FastifyRequest, rep: FastifyReply) {
   return rep.code(302).redirect(url);
 }
 
-export async function githubOAuthCallback(req: FastifyRequest, rep: FastifyReply) {
-  const accessToken = await req.server.githubOAuth2.getAccessTokenFromAuthorizationCodeFlow(req, rep);
-  const user = await authService.finishLoginFromGithub(accessToken.token.access_token);
+export async function githubOAuthCallback(
+  req: FastifyRequest,
+  rep: FastifyReply
+) {
+  const accessToken =
+    await req.server.githubOAuth2.getAccessTokenFromAuthorizationCodeFlow(
+      req,
+      rep
+    );
+  const user = await authService.finishLoginFromGithub(
+    accessToken.token.access_token
+  );
 
-  await req.server.issueSessionCookie(rep, { sub: user.id, pseudo: user.pseudoSuffix, email: user.email });
+  await req.server.issueSessionCookie(rep, {
+    sub: user.id,
+    pseudo: user.pseudoSuffix,
+    email: user.email,
+  });
 
-  const proto = String(req.headers["x-forwarded-proto"] ?? req.protocol);
-  const host = String(req.headers["x-forwarded-host"] ?? req.headers["host"]);
-  const origin = `${proto}://${host}`;
+  // const proto = String(req.headers["x-forwarded-proto"] ?? req.protocol);
+  // const host = String(req.headers["x-forwarded-host"] ?? req.headers["host"]);
+  // const origin = `${proto}://${host}`;
 
-  return rep.code(302).redirect(`${origin}`);
+  return rep.code(302).redirect(process.env.BASE_URL!);
 }
 
 export async function googleOAuthStart(req: FastifyRequest, rep: FastifyReply) {
@@ -63,33 +80,59 @@ export async function googleOAuthStart(req: FastifyRequest, rep: FastifyReply) {
   return rep.code(302).redirect(url);
 }
 
-export async function googleOAuthCallback(req: FastifyRequest, rep: FastifyReply) {
-  const accessToken = await req.server.googleOAuth2.getAccessTokenFromAuthorizationCodeFlow(req, rep);
-  const user = await authService.finishLoginFromGoogle(accessToken.token.access_token);
+export async function googleOAuthCallback(
+  req: FastifyRequest,
+  rep: FastifyReply
+) {
+  const accessToken =
+    await req.server.googleOAuth2.getAccessTokenFromAuthorizationCodeFlow(
+      req,
+      rep
+    );
+  const user = await authService.finishLoginFromGoogle(
+    accessToken.token.access_token
+  );
 
-  await req.server.issueSessionCookie(rep, { sub: user.id, pseudo: user.pseudoSuffix, email: user.email });
-  const proto = String(req.headers["x-forwarded-proto"] ?? req.protocol);
-  const host = String(req.headers["x-forwarded-host"] ?? req.headers["host"]);
-  const origin = `${proto}://${host}`;
+  await req.server.issueSessionCookie(rep, {
+    sub: user.id,
+    pseudo: user.pseudoSuffix,
+    email: user.email,
+  });
 
-  return rep.code(302).redirect(`${origin}`);
+  return rep.code(302).redirect(process.env.BASE_URL!);
 }
 
-export async function fortyTwoOAuthStart(req: FastifyRequest, rep: FastifyReply) {
-  const url = await req.server.fortyTwoOAuth2.generateAuthorizationUri(req, rep);
+export async function fortyTwoOAuthStart(
+  req: FastifyRequest,
+  rep: FastifyReply
+) {
+  const url = await req.server.fortyTwoOAuth2.generateAuthorizationUri(
+    req,
+    rep
+  );
   return rep.code(302).redirect(url);
 }
 
-export async function fortyTwoOAuthCallback(req: FastifyRequest, rep: FastifyReply) {
-  const accessToken = await req.server.fortyTwoOAuth2.getAccessTokenFromAuthorizationCodeFlow(req, rep);
-  const user = await authService.finishLoginFromFortyTwo(accessToken.token.access_token);
+export async function fortyTwoOAuthCallback(
+  req: FastifyRequest,
+  rep: FastifyReply
+) {
+  const accessToken =
+    await req.server.fortyTwoOAuth2.getAccessTokenFromAuthorizationCodeFlow(
+      req,
+      rep
+    );
+  const user = await authService.finishLoginFromFortyTwo(
+    accessToken.token.access_token
+  );
 
-  await req.server.issueSessionCookie(rep, { sub: user.id, pseudo: user.pseudoSuffix, email: user.email });
-  const proto = String(req.headers["x-forwarded-proto"] ?? req.protocol);
-  const host = String(req.headers["x-forwarded-host"] ?? req.headers["host"]);
-  const origin = `${proto}://${host}`;
+  await req.server.issueSessionCookie(rep, {
+    sub: user.id,
+    pseudo: user.pseudoSuffix,
+    email: user.email,
+  });
 
-  return rep.code(302).redirect(`${origin}`);
+  return rep.code(302).redirect(process.env.BASE_URL!);
 }
 
 // 2FA code at setup (user already logged in, current token is session cookie)
@@ -101,7 +144,10 @@ export async function setup2FA(req: FastifyRequest, rep: FastifyReply) {
   return rep.send(responseBody);
 }
 
-export async function verify2FAsetupCode(req: FastifyRequest, rep: FastifyReply) {
+export async function verify2FAsetupCode(
+  req: FastifyRequest,
+  rep: FastifyReply
+) {
   const meId = Number((req.user as any).sub);
   const { code } = (req.body as any) ?? {};
 
@@ -118,16 +164,27 @@ export async function disable2FA(req: FastifyRequest, rep: FastifyReply) {
 }
 
 // 2FA code at login (user pending login, current token is pending cookie)
-export async function verify2FAloginCode(req: FastifyRequest, rep: FastifyReply) {
+export async function verify2FAloginCode(
+  req: FastifyRequest,
+  rep: FastifyReply
+) {
   const pendingUser = (req as any).pendingUser as { sub?: number } | null;
   const userId = Number(pendingUser?.sub);
-  if (!Number.isInteger(userId) || userId <= 0) throw err("TWOFA_SETUP_REQUIRED");
+  if (!Number.isInteger(userId) || userId <= 0)
+    throw err("TWOFA_SETUP_REQUIRED");
 
   const { code } = (req.body as any) ?? {};
-  const user = await authService.verifyTwofaLoginCode(userId, String(code ?? ""));
+  const user = await authService.verifyTwofaLoginCode(
+    userId,
+    String(code ?? "")
+  );
 
   req.server.clearPendingCookie(rep);
-  await req.server.issueSessionCookie(rep, { sub: userId, pseudo: user.pseudo, email: user.email });
+  await req.server.issueSessionCookie(rep, {
+    sub: userId,
+    pseudo: user.pseudo,
+    email: user.email,
+  });
 
   let responseBody: dto.Success = { success: true };
   return rep.send(responseBody);
