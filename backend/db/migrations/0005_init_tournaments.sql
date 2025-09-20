@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS tournament_players (
   player_idx       INTEGER NOT NULL, -- stable index used by matches
   user_id          INTEGER NOT NULL REFERENCES users(id),
   name             TEXT NOT NULL, -- snapshot of user's pseudo (or a custom name)
-  avatar_url	   TEXT,
+  avatar_url	     TEXT,
   alias            TEXT,
   PRIMARY KEY (tournament_id, player_idx),
   UNIQUE (tournament_id, user_id)

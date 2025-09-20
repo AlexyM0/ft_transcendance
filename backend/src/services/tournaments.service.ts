@@ -3,7 +3,13 @@ import * as tournamentsModel from "../models/tournaments.model";
 import * as usersModel from "../models/users.model";
 import { err } from "../utils/errors";
 import { withTx } from "../utils/db";
-import type { TournamentLite, TournamentFull, CreateTournamentPayload, UpdateAliasPayload, TournamentStatus } from "../types/state_types";
+import type {
+  TournamentLite,
+  TournamentFull,
+  CreateTournamentPayload,
+  UpdateAliasPayload,
+  TournamentStatus,
+} from "../types/state_types";
 
 // Round-robin generator using player indices
 function draftRoundRobin(indices: number[]): Array<[number, number]> {
@@ -31,14 +37,34 @@ function draftRoundRobin(indices: number[]): Array<[number, number]> {
   return pairs;
 }
 
-export function listActiveTournaments(q: string, status: string, limit: number, offset: number): TournamentLite[] {
-  return tournamentsModel.listActiveTournamentsModel(q ?? "", status ?? "active", limit ?? 50, offset ?? 0);
+export function listActiveTournaments(
+  q: string,
+  status: string,
+  limit: number,
+  offset: number
+): TournamentLite[] {
+  return tournamentsModel.listActiveTournamentsModel(
+    q ?? "",
+    status ?? "active",
+    limit ?? 50,
+    offset ?? 0
+  );
 }
 
-export function createTournament(ownerId: number, payload: CreateTournamentPayload): TournamentFull {
+export function createTournament(
+  ownerId: number,
+  payload: CreateTournamentPayload
+): TournamentFull {
   const title = payload.name.trim() || "Untitled";
   const maxPlayers = Math.max(2, Math.min(64, payload.maxPlayers));
-  const tid = withTx(() => tournamentsModel.insertTournament(ownerId, title, maxPlayers, payload.settings));
+  const tid = withTx(() =>
+    tournamentsModel.insertTournament(
+      ownerId,
+      title,
+      maxPlayers,
+      payload.settings
+    )
+  );
   const full = tournamentsModel.getTournamentFullModel(tid);
 
   if (!full) throw err("TOURNAMENT_NOT_FOUND");
@@ -51,35 +77,55 @@ export function getTournament(tournamentId: number): TournamentFull {
   return full;
 }
 
-export function joinTournament(tournamentId: number, userId: number): TournamentFull {
+export function joinTournament(
+  tournamentId: number,
+  userId: number
+): TournamentFull {
   return withTx(() => {
     const t = tournamentsModel.getTournamentRow(tournamentId);
     if (!t) throw err("TOURNAMENT_NOT_FOUND");
-    if (t.status !== "registration") throw err("TOURNAMENT_NOT_IN_REGISTRATION");
-    if (tournamentsModel.isParticipant(tournamentId, userId)) return tournamentsModel.getTournamentFullModel(tournamentId)!;
+    if (t.status !== "registration")
+      throw err("TOURNAMENT_NOT_IN_REGISTRATION");
+    if (tournamentsModel.isParticipant(tournamentId, userId))
+      return tournamentsModel.getTournamentFullModel(tournamentId)!;
 
     const count = tournamentsModel.countPlayers(tournamentId);
     if (count >= t.max_players) throw err("TOURNAMENT_FULL");
 
     const u = tournamentsModel.getOwnerUser(userId); // reuse mapper to fetch {id,pseudo,...}
     const idx = tournamentsModel.nextPlayerIndex(tournamentId);
-    tournamentsModel.insertPlayer(tournamentId, idx, userId, u.pseudo, null);
+
+    const inserted = tournamentsModel.insertPlayer(
+      tournamentId,
+      idx,
+      userId,
+      null
+    );
+    console.log(inserted);
 
     return tournamentsModel.getTournamentFullModel(tournamentId)!;
   });
 }
 
-export function leaveTournament(tournamentId: number, userId: number): TournamentFull {
+export function leaveTournament(
+  tournamentId: number,
+  userId: number
+): TournamentFull {
   return withTx(() => {
     const t = tournamentsModel.getTournamentRow(tournamentId);
     if (!t) throw err("TOURNAMENT_NOT_FOUND");
-    if (t.status !== "registration") throw err("TOURNAMENT_NOT_IN_REGISTRATION");
+    if (t.status !== "registration")
+      throw err("TOURNAMENT_NOT_IN_REGISTRATION");
     tournamentsModel.deletePlayer(tournamentId, userId);
     return tournamentsModel.getTournamentFullModel(tournamentId)!;
   });
 }
 
-export function updateAlias(tournamentId: number, userId: number, payload: UpdateAliasPayload): TournamentFull {
+export function updateAlias(
+  tournamentId: number,
+  userId: number,
+  payload: UpdateAliasPayload
+): TournamentFull {
   return withTx(() => {
     const t = tournamentsModel.getTournamentRow(tournamentId);
     if (!t) throw err("TOURNAMENT_NOT_FOUND");
@@ -92,17 +138,25 @@ export function updateAlias(tournamentId: number, userId: number, payload: Updat
     const isSelf = userId === target.user_id;
     if (!isOwner && !isSelf) throw err("FORBIDDEN");
 
-    tournamentsModel.updateAliasByIndex(tournamentId, payload.index, payload.alias ?? (null as any));
+    tournamentsModel.updateAliasByIndex(
+      tournamentId,
+      payload.index,
+      payload.alias ?? (null as any)
+    );
     return tournamentsModel.getTournamentFullModel(tournamentId)!;
   });
 }
 
-export function startTournament(tournamentId: number, userId: number): TournamentFull {
+export function startTournament(
+  tournamentId: number,
+  userId: number
+): TournamentFull {
   return withTx(() => {
     const t = tournamentsModel.getTournamentRow(tournamentId);
     if (!t) throw err("TOURNAMENT_NOT_FOUND");
     if (t.owner_id !== userId) throw err("FORBIDDEN");
-    if (t.status !== "registration") throw err("TOURNAMENT_NOT_IN_REGISTRATION");
+    if (t.status !== "registration")
+      throw err("TOURNAMENT_NOT_IN_REGISTRATION");
 
     const n = tournamentsModel.countPlayers(tournamentId);
     if (n < 2) throw err("TOURNAMENT_NOT_FULL");
@@ -118,7 +172,23 @@ export function startTournament(tournamentId: number, userId: number): Tournamen
   });
 }
 
-export function recordMatchResult(matchId: number, scoreP1: number, scoreP2: number, userId: number) {
+export function cancelTournament(tournamentId: number, userId: number) {
+  return withTx(() => {
+    const t = tournamentsModel.getTournamentRow(tournamentId);
+    if (!t) throw err("TOURNAMENT_NOT_FOUND");
+    if (t.owner_id !== userId) throw err("FORBIDDEN");
+
+    tournamentsModel.cancelTournament(tournamentId);
+    return true;
+  });
+}
+
+export function recordMatchResult(
+  matchId: number,
+  scoreP1: number,
+  scoreP2: number,
+  userId: number
+) {
   return withTx(() => {
     const m = tournamentsModel.getMatch(matchId);
     if (!m) throw err("TOURNAMENT_NOT_FOUND");
@@ -128,7 +198,10 @@ export function recordMatchResult(matchId: number, scoreP1: number, scoreP2: num
 
     // Policy: any participant may record; you can tighten to owner-only if you like.
     // Quick check: user is any participant in this tournament
-    if (!tournamentsModel.isParticipant(m.tournament_id, userId) && userId !== t.owner_id) {
+    if (
+      !tournamentsModel.isParticipant(m.tournament_id, userId) &&
+      userId !== t.owner_id
+    ) {
       throw err("FORBIDDEN");
     }
 

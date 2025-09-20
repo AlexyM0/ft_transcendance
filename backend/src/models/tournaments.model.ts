@@ -1,7 +1,16 @@
 // tournaments.model.ts
 import { db } from "../utils/db";
+import * as usersModel from "./users.model";
 
-import type { TournamentStatus, TournamentLite, TournamentFull, PublicUser, TournamentPlayerSlot, TournamentMatch, MatchSettings } from "../types/state_types";
+import type {
+  TournamentStatus,
+  TournamentLite,
+  TournamentFull,
+  PublicUser,
+  TournamentPlayerSlot,
+  TournamentMatch,
+  MatchSettings,
+} from "../types/state_types";
 
 export type TournamentRow = {
   tournament_id: number;
@@ -29,7 +38,12 @@ const rowToPublicUser = (r: any): PublicUser => ({
   avatar_url: r.avatar_url ?? null,
 });
 
-export function insertTournament(ownerId: number, title: string, maxPlayers: number, settings: MatchSettings): number {
+export function insertTournament(
+  ownerId: number,
+  title: string,
+  maxPlayers: number,
+  settings: MatchSettings
+): number {
   const stmt = db.prepare(`
     INSERT INTO tournaments (title, owner_id, max_players, status, settings_json)
     VALUES (?, ?, ?, 'registration', ?)
@@ -39,15 +53,24 @@ export function insertTournament(ownerId: number, title: string, maxPlayers: num
 }
 
 export function getTournamentRow(tournamentId: number) {
-  return db.prepare(`SELECT * FROM tournaments WHERE tournament_id = ?`).get(tournamentId) as TournamentRow;
+  return db
+    .prepare(`SELECT * FROM tournaments WHERE tournament_id = ?`)
+    .get(tournamentId) as TournamentRow;
 }
 
 export function getOwnerUser(owner_id: number): PublicUser {
-  const r = db.prepare(`SELECT id, pseudo, avatar_url FROM users WHERE id = ?`).get(owner_id);
+  const r = db
+    .prepare(`SELECT id, pseudo, avatar_url FROM users WHERE id = ?`)
+    .get(owner_id);
   return rowToPublicUser(r);
 }
 
-export function listActiveTournamentsModel(q: string, status: string, limit: number, offset: number): TournamentLite[] {
+export function listActiveTournamentsModel(
+  q: string,
+  status: string,
+  limit: number,
+  offset: number
+): TournamentLite[] {
   // status="active" means registration OR ongoing
   const statuses = status === "active" ? ["registration", "ongoing"] : [status];
 
@@ -70,7 +93,11 @@ export function listActiveTournamentsModel(q: string, status: string, limit: num
   return rows.map((r: any) => ({
     tournament_id: r.tournament_id,
     title: r.title,
-    created_by: { id: r.creator_id, pseudo: r.pseudo, avatar_url: r.avatar_url },
+    created_by: {
+      id: r.creator_id,
+      pseudo: r.pseudo,
+      avatar_url: r.avatar_url,
+    },
     max_players: r.max_players,
     player_count: r.player_count,
     status: r.status as TournamentStatus,
@@ -78,7 +105,9 @@ export function listActiveTournamentsModel(q: string, status: string, limit: num
   }));
 }
 
-export function getTournamentFullModel(tournamentId: number): TournamentFull | null {
+export function getTournamentFullModel(
+  tournamentId: number
+): TournamentFull | null {
   const t = getTournamentRow(tournamentId);
 
   if (!t) return null;
@@ -87,7 +116,7 @@ export function getTournamentFullModel(tournamentId: number): TournamentFull | n
 
   const players = db
     .prepare(
-      `SELECT user_id, name, alias
+      `SELECT user_id, name, alias, avatar_url
      FROM tournament_players
      WHERE tournament_id = ?
      ORDER BY player_idx ASC`
@@ -103,8 +132,6 @@ export function getTournamentFullModel(tournamentId: number): TournamentFull | n
     )
     .all(tournamentId) as TournamentMatch[];
 
-  console.log(players);
-
   const full: TournamentFull = {
     tournament_id: t.tournament_id,
     title: t.title,
@@ -118,38 +145,83 @@ export function getTournamentFullModel(tournamentId: number): TournamentFull | n
   return full;
 }
 
+export function cancelTournament(tournamentId: number) {
+  db.prepare(`DELETE FROM tournaments WHERE tournament_id = ?`).run(
+    tournamentId
+  );
+}
+
 export function countPlayers(tournamentId: number): number {
-  const r = db.prepare(`SELECT COUNT(*) AS c FROM tournament_players WHERE tournament_id = ?`).get(tournamentId) as { c: number };
+  const r = db
+    .prepare(
+      `SELECT COUNT(*) AS c FROM tournament_players WHERE tournament_id = ?`
+    )
+    .get(tournamentId) as { c: number };
   return r?.c ?? 0;
 }
 
 export function isParticipant(tournamentId: number, userId: number): boolean {
-  const r = db.prepare(`SELECT 1 FROM tournament_players WHERE tournament_id = ? AND user_id = ? LIMIT 1`).get(tournamentId, userId);
+  const r = db
+    .prepare(
+      `SELECT 1 FROM tournament_players WHERE tournament_id = ? AND user_id = ? LIMIT 1`
+    )
+    .get(tournamentId, userId);
   return !!r;
 }
 
 export function nextPlayerIndex(tournamentId: number): number {
-  const r = db.prepare(`SELECT COALESCE(MAX(player_idx), -1) + 1 AS next_idx FROM tournament_players WHERE tournament_id = ?`).get(tournamentId) as { next_idx: number };
+  const r = db
+    .prepare(
+      `SELECT COALESCE(MAX(player_idx), -1) + 1 AS next_idx FROM tournament_players WHERE tournament_id = ?`
+    )
+    .get(tournamentId) as { next_idx: number };
   return r?.next_idx ?? 0;
 }
 
-export function insertPlayer(tournamentId: number, player_idx: number, userId: number, name: string, alias: string | null) {
+export function insertPlayer(
+  tournamentId: number,
+  player_idx: number,
+  userId: number,
+  alias: string | null
+) {
   db.prepare(
-    `INSERT INTO tournament_players (tournament_id, player_idx, user_id, name, alias)
-     VALUES (?, ?, ?, ?, ?)`
-  ).run(tournamentId, player_idx, userId, name, alias);
+    `
+    INSERT INTO tournament_players
+      (tournament_id, player_idx, user_id, name, alias, avatar_url)
+    SELECT
+      ?,            -- tournament_id
+      ?,            -- player_idx
+      u.id,         -- user_id
+      u.pseudo,     -- name snapshot
+      ?,            -- alias from caller
+      u.avatar_url  -- avatar snapshot
+    FROM users u
+    WHERE u.id = ?;
+  `
+  ).run(tournamentId, player_idx, alias, userId);
 }
 
 export function deletePlayer(tournamentId: number, userId: number) {
-  db.prepare(`DELETE FROM tournament_players WHERE tournament_id = ? AND user_id = ?`).run(tournamentId, userId);
+  db.prepare(
+    `DELETE FROM tournament_players WHERE tournament_id = ? AND user_id = ?`
+  ).run(tournamentId, userId);
 }
 
-export function updateAliasByIndex(tournamentId: number, index: number, alias: string) {
-  db.prepare(`UPDATE tournament_players SET alias = ? WHERE tournament_id = ? AND player_idx = ?`).run(alias, tournamentId, index);
+export function updateAliasByIndex(
+  tournamentId: number,
+  index: number,
+  alias: string
+) {
+  db.prepare(
+    `UPDATE tournament_players SET alias = ? WHERE tournament_id = ? AND player_idx = ?`
+  ).run(alias, tournamentId, index);
 }
 
 export function setStatus(tournamentId: number, status: TournamentStatus) {
-  db.prepare(`UPDATE tournaments SET status = ? WHERE tournament_id = ?`).run(status, tournamentId);
+  db.prepare(`UPDATE tournaments SET status = ? WHERE tournament_id = ?`).run(
+    status,
+    tournamentId
+  );
 }
 
 export function insertMatch(tournamentId: number, p1: number, p2: number) {
@@ -159,10 +231,18 @@ export function insertMatch(tournamentId: number, p1: number, p2: number) {
   ).run(tournamentId, p1, p2);
 }
 
-export function updateMatchScore(matchId: number, scoreP1: number, scoreP2: number) {
-  db.prepare(`UPDATE tournament_matches SET played = 1, score_p1 = ?, score_p2 = ? WHERE match_id = ?`).run(scoreP1, scoreP2, matchId);
+export function updateMatchScore(
+  matchId: number,
+  scoreP1: number,
+  scoreP2: number
+) {
+  db.prepare(
+    `UPDATE tournament_matches SET played = 1, score_p1 = ?, score_p2 = ? WHERE match_id = ?`
+  ).run(scoreP1, scoreP2, matchId);
 }
 
 export function getMatch(matchId: number) {
-  return db.prepare(`SELECT * FROM tournament_matches WHERE match_id = ?`).get(matchId) as TournamentMatchRow;
+  return db
+    .prepare(`SELECT * FROM tournament_matches WHERE match_id = ?`)
+    .get(matchId) as TournamentMatchRow;
 }

@@ -1,13 +1,28 @@
 // src/api/tournaments.ts
-import { getRequest, postRequest, putRequest } from "./http";
-import type { TournamentStatus, TournamentLite, TournamentPlayerSlot, TournamentMatch, TournamentFull, CreateTournamentPayload, UpdateAliasPayload } from "./types";
+import { deleteRequest, getRequest, postRequest, putRequest } from "./http";
+import type {
+  TournamentLite,
+  TournamentFull,
+  CreateTournamentPayload,
+  UpdateAliasPayload,
+} from "./types";
 
 export const TournamentsAPI = {
   /**
    * GET /api/tournaments?limit&offset -> { tournaments, limit, offset }
    */
-  listActiveTournaments: (query: string, status = "active", limit = 50, offset = 0) => {
-    return getRequest<TournamentLite[]>("/tournaments", { q: query, status, limit, offset });
+  listActiveTournaments: (
+    query: string,
+    status = "active",
+    limit = 50,
+    offset = 0
+  ) => {
+    return getRequest<TournamentLite[]>("/tournaments", {
+      q: query,
+      status,
+      limit,
+      offset,
+    });
   },
 
   /**
@@ -43,17 +58,33 @@ export const TournamentsAPI = {
    * PUT /api/tournaments/:tournamentId/alias
    */
   updateAlias: (tournamentId: number, payload: UpdateAliasPayload) => {
-    return putRequest<TournamentFull>(`/tournaments/${tournamentId}/alias`, payload);
+    return putRequest<TournamentFull>(
+      `/tournaments/${tournamentId}/alias`,
+      payload
+    );
   },
 
+  /**
+   * POST /api/tournaments/:tournamentId/start
+   */
   startTournament: (tournamentId: number) => {
     return postRequest<TournamentFull>(`/tournaments/${tournamentId}/start`);
+  },
+
+  /**
+   * DELETE /api/tournaments/:tournamentId
+   */
+  cancelTournament: (tournamentId: number) => {
+    return deleteRequest<{ deleted: true }>(`/tournaments/${tournamentId}`);
   },
 
   /**
    * PUT /api/tournaments/:matchId/result (body: { scoreP1, scoreP2 }) -> updated match (backend returns "updated")
    */
   recordMatchResult: (matchId: number, scoreP1: number, scoreP2: number) => {
-    return putRequest<any>(`/tournaments/${matchId}/result`, { scoreP1, scoreP2 });
+    return putRequest<any>(`/tournaments/${matchId}/result`, {
+      scoreP1,
+      scoreP2,
+    });
   },
 };

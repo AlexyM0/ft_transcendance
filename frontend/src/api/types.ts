@@ -4,7 +4,6 @@
  */
 
 import type { MatchSettings } from "../helpers/GameTypes";
-import type { Settings } from "../helpers/state_types";
 
 export type Me = {
   id: number;
@@ -77,7 +76,11 @@ export type UserMatches = {
   offset: number;
 };
 
-export type TournamentStatus = "registration" | "ongoing" | "finished" | "canceled";
+export type TournamentStatus =
+  | "registration"
+  | "ongoing"
+  | "finished"
+  | "canceled";
 
 export type TournamentLite = {
   tournament_id: number;
@@ -93,6 +96,7 @@ export type TournamentPlayerSlot = {
   user_id: number;
   name: string;
   alias: string | null;
+  avatar_url: string | null;
 };
 
 export type TournamentMatch = {

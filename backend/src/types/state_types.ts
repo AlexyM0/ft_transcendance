@@ -1,7 +1,11 @@
 // src/helpers/state_types.ts
 
 export type UserRow = { id: number; pseudo: string; avatar_url: string | null };
-export type PublicUser = { id: number; pseudo: string; avatar_url: string | null };
+export type PublicUser = {
+  id: number;
+  pseudo: string;
+  avatar_url: string | null;
+};
 
 export type UserStatus = "available" | "in_lobby" | "playing" | "dnd";
 
@@ -95,7 +99,11 @@ export type LobbyState = {
   error: string | null;
 };
 
-export type TournamentStatus = "registration" | "ongoing" | "finished" | "canceled";
+export type TournamentStatus =
+  | "registration"
+  | "ongoing"
+  | "finished"
+  | "canceled";
 
 export type TournamentLite = {
   tournament_id: number;
@@ -111,6 +119,7 @@ export type TournamentPlayerSlot = {
   user_id: number;
   name: string;
   alias: string | null;
+  avatar_url: string | null;
 };
 
 export type TournamentMatch = {

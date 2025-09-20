@@ -11,6 +11,7 @@ import { ChatsView } from "../views/ChatsView";
 import { TournamentsView } from "../views/TournamentsView";
 import { MatchLocalView } from "../views/MatchLocalView";
 import { MatchOnlineView } from "../views/MatchOnlineView";
+import { TournamentMatchLocalView } from "../views/TournamentMatchLocalView";
 
 export type Route = {
   path: string;
@@ -31,11 +32,17 @@ export const Routes: Route[] = [
   { path: "/users/:pseudo", view: AppShell(ProfileView), auth: true },
   { path: "/chats", view: AppShell(ChatsView), auth: true },
   { path: "/tournaments", view: AppShell(TournamentsView), auth: true },
+  {
+    path: "/tournaments/play/local",
+    view: AppShell(TournamentMatchLocalView),
+    auth: true,
+  },
 ];
 
 export async function guard({ route }: { route: Route }) {
   const s = auth.get();
   if (s.loading) return;
   if (route.auth && !s.meId) location.hash = "/login";
-  if (!route.auth && route.path === "/login" && s.meId) location.hash = "/profile";
+  if (!route.auth && route.path === "/login" && s.meId)
+    location.hash = "/profile";
 }

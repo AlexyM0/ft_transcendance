@@ -6,13 +6,13 @@ import { createGameLocalState } from "../helpers/GameLocalState";
 import type { Settings } from "./PlayLocalView";
 import type { MatchSettings, MatchState, Side } from "../helpers/GameTypes";
 import { Avatar } from "../ui/Avatar";
-import * as http from "../api/http";
+import { TournamentsAPI } from "../api/tournaments";
 
-export function MatchLocalView(root: HTMLElement) {
+export function TournamentMatchLocalView(root: HTMLElement) {
   /** -- Config settings from PlayView */
-  const raw = sessionStorage.getItem("play:local:current");
+  const raw = sessionStorage.getItem("play:tournament:local:current");
   if (!raw) {
-    location.hash = "/player/chooser";
+    location.hash = "/tournaments";
     return () => {};
   }
 
@@ -101,13 +101,11 @@ export function MatchLocalView(root: HTMLElement) {
   mount(header, leftInfoWrap, rightInfoWrap);
 
   /** -- DOM Elements - Wire Quit btn to API */
-  async function quitRunningGame() {
-    await http.putRequest(`/matches/${state.matchId}/cancel`);
-    sessionStorage.removeItem("play:local:current");
-    location.hash = "/play";
-  }
-
-  quitBtn.addEventListener("click", quitRunningGame);
+  quitBtn.addEventListener("click", async () => {
+    // await http.putRequest(`/matches/${state.matchId}/cancel`);
+    sessionStorage.removeItem("play:tournament:local:current");
+    location.hash = "/tournament";
+  });
 
   /** -- Game driver */
   const driver = GameLocalDriver(renderer, state, {
@@ -116,15 +114,12 @@ export function MatchLocalView(root: HTMLElement) {
       rightInfoScore.textContent = String(rightScore);
     },
     onOver: async (leftScore, rightScore) => {
-      quitBtn.removeEventListener("click", quitRunningGame);
-      await http.putRequest(`/matches/${state.matchId}/result`, {
-        scoreP1: leftScore,
-        scoreP2: rightScore,
-      });
-      sessionStorage.removeItem("play:local:current");
-      quitBtn.addEventListener("click", () => {
-        location.hash = "/play";
-      });
+      await TournamentsAPI.recordMatchResult(
+        state.matchId,
+        leftScore,
+        rightScore
+      );
+      sessionStorage.removeItem("play:tournament:local:current");
     },
   });
 
